@@ -6,12 +6,75 @@ interface CentrifugeContext {
   [key: string]: any;
 }
 
+interface Chat {
+  id: string;
+  name: string;
+  userCount: number; // ДОБАВЬ ЭТО
+  lastMessage?: string; // ДОБАВЬ ЭТО (опционально)
+}
+
 export const useCentrifuge = () => {
   const centrifuge = ref<Centrifuge | null>(null);
   const isConnected = ref(false);
   const connectionError = ref<string>("");
   const reconnectAttempts = ref(0);
   const maxReconnectAttempts = 5;
+  const loadedChats = ref<Chat[]>([]); // Добавляем реактивные чаты
+
+  // Функция загрузки истории
+  const loadHistory = async (channel: string) => {
+    console.log("🔄 Loading history for channel:", channel);
+    try {
+      const response = await $fetch("/api/centrifugo/history", {
+        method: "POST",
+        headers: {
+          Authorization:
+            "apikey GGMnEv_F6rZjnMQqCousEmqhlOJm0LuodrHnUxfpJRxzqI41u4t-Tjze8Qpk3XFRIwiRd9SB-R_0pcCji1agVA",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          method: "history",
+          params: { channel, limit: 100 },
+        }),
+      });
+      console.log("📦 History response:", response);
+      return response.messages || [];
+    } catch (error) {
+      console.error("History load error:", error);
+      return [];
+    }
+  };
+
+  // Функция загрузки чатов пользователя
+  const loadUserChats = async (): Promise<Chat[]> => {
+    try {
+      const response = await $fetch("/api/chats", {
+        method: "GET",
+      });
+
+      // Добавляем недостающие поля для интерфейса
+      return (response.chats || []).map((chat) => ({
+        id: chat.id,
+        name: chat.name,
+        userCount: chat.userCount || 1,
+        lastMessage: chat.lastMessage || "Нет сообщений", // Используй из API если есть
+      }));
+    } catch (error) {
+      console.error("❌ Failed to load user chats:", error);
+      return [];
+    }
+  };
+
+  // Функция добавления сообщений в чат
+  const addMessagesToChat = (chatId: string, messages: any[]) => {
+    // Эмитим событие или обновляем хранилище
+    const event = new CustomEvent("chat-history-loaded", {
+      detail: { chatId, messages },
+    });
+    window.dispatchEvent(event);
+
+    console.log(`✅ Added ${messages.length} messages to chat ${chatId}`);
+  };
 
   const connect = async (token: string): Promise<boolean> => {
     return new Promise((resolve) => {
@@ -19,7 +82,6 @@ export const useCentrifuge = () => {
         connectionError.value = "";
 
         const getWsUrl = (): string => {
-          // ВСЕГДА используем домен через nginx
           return "wss://mio-messenger.com/connection/websocket";
         };
 
@@ -39,11 +101,36 @@ export const useCentrifuge = () => {
           connectionError.value = "Подключаемся...";
         });
 
-        centrifuge.value.on("connected", (ctx: CentrifugeContext) => {
+        centrifuge.value.on("connected", async (ctx) => {
           console.log("✅ Connected to Centrifugo!");
           isConnected.value = true;
           connectionError.value = "";
           reconnectAttempts.value = 0;
+
+          // Загружаем чаты и историю
+          try {
+            const userChats = await loadUserChats();
+            loadedChats.value = userChats; // Сохраняем чаты
+            console.log(`📋 Loaded ${userChats.length} chats`);
+
+            // Для каждого чата загружаем историю
+            for (const chat of userChats) {
+              const messages = await loadHistory(`chat:${chat.id}`);
+              console.log(
+                `📜 Loaded ${messages.length} messages for chat ${chat.id}`
+              );
+              addMessagesToChat(chat.id, messages);
+
+              // Подписываемся на новые сообщения
+              subscribe(`chat:${chat.id}`, (data) => {
+                console.log("📨 New message:", data);
+                addMessagesToChat(chat.id, [data.message]);
+              });
+            }
+          } catch (error) {
+            console.error("❌ Failed to load chats history:", error);
+          }
+
           resolve(true);
         });
 
@@ -134,5 +221,7 @@ export const useCentrifuge = () => {
     disconnect,
     isConnected: readonly(isConnected),
     connectionError: readonly(connectionError),
+    loadedChats,
+    loadHistory,
   };
 };

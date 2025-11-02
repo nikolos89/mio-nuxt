@@ -22,7 +22,8 @@ interface Message {
 }
 
 // Composables
-const { connect, subscribe, isConnected, connectionError } = useCentrifuge();
+const { connect, subscribe, isConnected, connectionError, loadedChats } =
+  useCentrifuge();
 
 // State
 const currentUser = ref("");
@@ -36,6 +37,11 @@ const messagesContainer = ref<HTMLElement>();
 const currentMessages = computed(() => {
   if (!selectedChat.value) return [];
   return chatMessages.value[selectedChat.value.id] || [];
+});
+
+// Добавь computed для чатов
+const displayChats = computed(() => {
+  return loadedChats.value.length > 0 ? loadedChats.value : chats.value;
 });
 
 // Methods
@@ -142,7 +148,10 @@ const createNewChat = () => {
     userCount: 1,
   };
 
+  // Добавляем в оба массива
   chats.value.unshift(newChat);
+  loadedChats.value.unshift(newChat); // ДОБАВЬ ЭТУ СТРОКУ
+
   selectChat(newChat);
 };
 
@@ -219,27 +228,8 @@ onMounted(() => {
     localStorage.setItem("chat-username", newUser);
   }
 
-  // Инициализируем чаты
-  chats.value = [
-    // {
-    //   id: "1",
-    //   name: "Общий чат",
-    //   lastMessage: "Добро пожаловать!",
-    //   userCount: 3,
-    // },
-    // {
-    //   id: "2",
-    //   name: "Техподдержка",
-    //   lastMessage: "Чем можем помочь?",
-    //   userCount: 2,
-    // },
-    // {
-    //   id: "3",
-    //   name: "Разработка",
-    //   lastMessage: "Обсуждаем новые фичи",
-    //   userCount: 5,
-    // },
-  ];
+  // УБЕРИ эту строку - чаты будут загружаться из useCentrifuge
+  // chats.value = [];
 
   initializeChat();
 });
@@ -374,7 +364,7 @@ const items = [
 
             <div class="flex-1 overflow-y-auto">
               <div
-                v-for="chat in chats"
+                v-for="chat in displayChats"
                 :key="chat.id"
                 @click="selectChat(chat)"
                 class="px-4 py-4 pr-2 border-b cursor-pointer transition-colors hover:bg-blue-50"
