@@ -19,23 +19,8 @@ export const useCentrifuge = () => {
         connectionError.value = "";
 
         const getWsUrl = (): string => {
-          if (typeof window === "undefined") {
-            // Серверный рендеринг - используем localhost
-            return "ws://127.0.0.1:8000/connection/websocket";
-          }
-
-          // Клиентский код
-          const protocol =
-            window.location.protocol === "https:" ? "wss:" : "ws:";
-          const hostname = window.location.hostname;
-
-          // Если открыто с домена mio-messenger.com (на сервере) - используем 127.0.0.1
-          if (hostname === "mio-messenger.com") {
-            return "ws://127.0.0.1:8000/connection/websocket";
-          } else {
-            // Если открыто с localhost (разработка на ноутбуке) - используем домен
-            return "wss://mio-messenger.com/connection/websocket";
-          }
+          // ВСЕГДА используем домен через nginx
+          return "wss://mio-messenger.com/connection/websocket";
         };
 
         const wsUrl = getWsUrl();
