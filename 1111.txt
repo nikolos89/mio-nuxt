@@ -1,0 +1,100 @@
+root@debian-Bern-1gb:/# cat /etc/centrifugo/config.json
+{
+  "address": "0.0.0.0",
+  "port": 8000,
+  "client": {
+    "token": {
+      "hmac_secret_key": "9hfBoHP9HujBtnKoc-KMEDFnTCmPWfjZxCoHacagiI0HLcOww503Qz64tZrstfKD-foGBGeUdoQ8_lyt"
+    },
+    "allowed_origins": [
+      "http://localhost:3000",
+      "http://mio-messenger.com",
+      "https://mio-messenger.com",
+      "http://mio-messenger.com:3000",
+      "https://mio-messenger.com:3000",
+      "http://45.59.119.225",
+      "http://45.59.119.225:3000"
+    ]
+  },
+  "admin": {
+    "enabled": true,
+    "password": "OsMQOwwKs4Q1SkvZ_7Sx0Q",
+    "secret": "MLeayijlYRLfWW-a0F8mL6X1VJWZxIgHfrWnWkcolF2dAAfzDH-1xSec53Z4EeTTEhywxKyVQyk3PkP0cOoKBw"
+  },
+  "http_api": {
+    "key": "GGMnEv_F6rZjnMQqCousEmqhlOJm0LuodrHnUxfpJRxzqI41u4t-Tjze8Qpk3XFRIwiRd9SB-R_0pcCji1agVA"
+  },
+  "channel": {
+    "namespaces": [
+      {
+        "name": "chat",
+        "history_size": 100,
+        "history_ttl": "24h"
+      }
+    ]
+  }
+}
+root@debian-Bern-1gb:/#
+
+
+
+
+
+
+рабочий конфиг сяс для Центрифуги
+
+
+
+
+конфиг нжинкса:
+
+server {
+
+	root /var/www/html;
+
+	# Add index.php to the list if you are using PHP
+	index index.html index.htm index.nginx-debian.html;
+
+	#server_name _;
+	server_name mio-messenger.com www.mio-messenger.com;
+
+	location / {
+		# First attempt to serve request as file, then
+		# as directory, then fall back to displaying a 404.
+		try_files $uri $uri/ =404;
+	}
+
+
+    listen 443 ssl; # managed by Certbot
+    listen [::]:443 ssl ipv6only=on; # managed by Certbot
+    ssl_certificate /etc/letsencrypt/live/mio-messenger.com/fullchain.pem; # managed by Certbot
+    ssl_certificate_key /etc/letsencrypt/live/mio-messenger.com/privkey.pem; # managed by Certbot
+    include /etc/letsencrypt/options-ssl-nginx.conf; # managed by Certbot
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem; # managed by Certbot
+
+
+}
+
+
+server {
+    if ($host = www.mio-messenger.com) {
+        return 301 https://$host$request_uri;
+    } # managed by Certbot
+
+
+    if ($host = mio-messenger.com) {
+        return 301 https://$host$request_uri;
+    } # managed by Certbot
+
+
+	listen 80 default_server;
+	listen [::]:80 default_server;
+	server_name mio-messenger.com www.mio-messenger.com;
+    return 404; # managed by Certbot
+
+
+
+
+}
+
+уход от Призмы
