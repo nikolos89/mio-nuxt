@@ -22,6 +22,7 @@ export const useCentrifuge = () => {
   const reconnectAttempts = ref(0);
   const loadedChats = ref<Chat[]>([]);
   const activeSubscriptions = ref<Map<string, any>>(new Map());
+  const isSubscribedToChats = ref(false);
 
   // Функция загрузки истории
   const loadHistory = async (channel: string) => {
@@ -184,6 +185,12 @@ export const useCentrifuge = () => {
       return;
     }
 
+    // Проверяем, не подписаны ли уже
+    if (isSubscribedToChats.value) {
+      console.log("ℹ️ Already subscribed to chats updates");
+      return;
+    }
+
     const channel = "chats:updates";
 
     try {
@@ -198,10 +205,12 @@ export const useCentrifuge = () => {
 
       sub.on("subscribed", (ctx: any) => {
         console.log(`✅ Successfully subscribed to ${channel}`);
+        isSubscribedToChats.value = true;
       });
 
       sub.on("error", (err: any) => {
         console.error(`💥 Subscription error for ${channel}:`, err);
+        isSubscribedToChats.value = false;
       });
 
       sub.subscribe();
@@ -299,6 +308,7 @@ export const useCentrifuge = () => {
           console.log("❌ Disconnected from Centrifugo:", ctx.reason);
           isConnected.value = false;
           connectionError.value = `Отключено: ${ctx.reason}`;
+          isSubscribedToChats.value = false;
 
           // Автоматически переподключаемся через 2 секунды
           setTimeout(() => {
@@ -320,17 +330,6 @@ export const useCentrifuge = () => {
             `🔄 Reconnecting... (attempt ${reconnectAttempts.value})`
           );
           connectionError.value = `Переподключение... (попытка ${reconnectAttempts.value})`;
-        });
-
-        // ОБРАБОТЧИК ПОВТОРНОГО ПОДКЛЮЧЕНИЯ - ВОССТАНАВЛИВАЕМ ПОДПИСКИ
-        centrifuge.value.on("connected", (ctx) => {
-          console.log("🔄 Reconnected, restoring subscriptions...");
-          // Восстанавливаем подписки на все активные чаты
-          loadedChats.value.forEach((chat) => {
-            subscribeToChatMessages(chat.id);
-          });
-          // Восстанавливаем подписку на обновления чатов
-          subscribeToChatsUpdates();
         });
 
         centrifuge.value.connect();
@@ -389,6 +388,7 @@ export const useCentrifuge = () => {
         console.log(`🔴 Unsubscribed from ${channel}`);
       });
       activeSubscriptions.value.clear();
+      isSubscribedToChats.value = false;
 
       centrifuge.value.disconnect();
       centrifuge.value = null;
@@ -410,6 +410,6 @@ export const useCentrifuge = () => {
     loadHistory,
     addNewChat,
     updateChatLastMessage,
-    subscribeToChatMessages, // ЭКСПОРТИРУЕМ НОВУЮ ФУНКЦИЮ
+    subscribeToChatMessages,
   };
 };

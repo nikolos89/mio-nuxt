@@ -27,7 +27,7 @@ const { connect, isConnected, connectionError, loadedChats, addNewChat } =
 const auth = useAuth();
 const messagesStore = useMessagesStore();
 
-// State - используем ID пользователя из авторизации
+// State
 const currentUser = computed(() => auth.user?.id || "");
 const selectedChat = ref<Chat | null>(null);
 const newMessage = ref("");
@@ -74,7 +74,7 @@ const initializeChat = async () => {
 
       if (connected) {
         console.log("🎉 Successfully connected to Centrifugo!");
-        // ВСЕ ПОДПИСКИ ТЕПЕРЬ АВТОМАТИЧЕСКИ В useCentrifuge
+        console.log("📋 Current chats:", loadedChats.value);
       } else {
         console.error("❌ Failed to connect to Centrifugo");
       }
@@ -90,7 +90,7 @@ const updateChatLastMessage = (chatId: string, message: string) => {
   // Обновляем в loadedChats через composable
   addNewChat({
     id: chatId,
-    name: `Чат ${chatId}`, // Имя будет обновлено при получении данных
+    name: `Чат ${chatId}`,
     userCount: 1,
     lastMessage:
       message.length > 50 ? message.substring(0, 50) + "..." : message,
@@ -101,11 +101,8 @@ const handleKeydown = (event: KeyboardEvent) => {
   if (event.key === "Enter") {
     if (event.shiftKey) {
       // Shift+Enter - позволяем браузеру добавить новую строку
-      // Ничего не делаем, браузер сам добавит \n
     } else {
-      // Enter - отправка сообщения
       event.preventDefault();
-
       sendMessage();
       calculateRows();
     }
@@ -115,26 +112,20 @@ const handleKeydown = (event: KeyboardEvent) => {
 const textareaRef = ref<HTMLTextAreaElement>();
 const textareaRows = ref(1);
 
-// Вычисляем количество строк для textarea
 const calculateRows = () => {
   if (!textareaRef.value) return 1;
-
   const textarea = textareaRef.value;
-  const lineHeight = 20; // Примерная высота строки в px
-  const padding = 24; // padding-top + padding-bottom
-
-  // Временно убираем ограничение по строкам для расчета
+  const lineHeight = 20;
+  const padding = 24;
   textarea.style.height = "auto";
   const contentHeight = textarea.scrollHeight - padding;
   const calculatedRows = Math.max(
     1,
     Math.min(6, Math.floor(contentHeight / lineHeight))
   );
-
   return calculatedRows;
 };
 
-// Следим за изменением текста и обновляем количество строк
 watch(newMessage, () => {
   nextTick(() => {
     textareaRows.value = calculateRows();
@@ -142,7 +133,7 @@ watch(newMessage, () => {
 });
 
 const createNewChat = async () => {
-  const newChatId = Date.now().toString(); // Используем timestamp как ID
+  const newChatId = Date.now().toString();
   const newChat: Chat = {
     id: newChatId,
     name: `Чат ${newChatId}`,
@@ -151,7 +142,8 @@ const createNewChat = async () => {
   };
 
   try {
-    // Отправляем запрос на создание чата
+    console.log("🔄 Creating new chat:", newChat);
+
     const response = await $fetch("/api/chats", {
       method: "POST",
       body: {
@@ -161,9 +153,7 @@ const createNewChat = async () => {
 
     if (response.success) {
       console.log("✅ Chat created successfully:", newChat);
-
-      // Чат автоматически добавится через Centrifugo подписку
-      // и будет отображен в реальном времени
+      console.log("📋 Current chats after creation:", loadedChats.value);
 
       // Выбираем созданный чат
       selectChat(newChat);
@@ -172,8 +162,7 @@ const createNewChat = async () => {
     }
   } catch (error) {
     console.error("❌ Error creating chat:", error);
-
-    // Fallback: добавляем локально если сервер недоступен
+    // Fallback
     addNewChat(newChat);
     selectChat(newChat);
   }
@@ -197,20 +186,12 @@ const sendMessage = async () => {
   };
 
   try {
-    // НЕМЕДЛЕННО добавляем сообщение в хранилище
     const messagesStore = useMessagesStore();
     messagesStore.addMessage(selectedChat.value.id, message);
-
-    // Обновляем последнее сообщение в чате
     updateChatLastMessage(selectedChat.value.id, newMessage.value);
-
-    // Очищаем поле ввода
     newMessage.value = "";
-
-    // Скроллим вниз
     nextTick(() => scrollToBottom());
 
-    // Затем отправляем на сервер
     await $fetch("/api/centrifugo/publish", {
       method: "POST",
       body: {
@@ -222,7 +203,6 @@ const sendMessage = async () => {
     console.log("✅ Message sent to server");
   } catch (error) {
     console.error("Failed to send message:", error);
-    // Можно показать уведомление пользователю
   }
 };
 
@@ -239,15 +219,21 @@ const formatTime = (timestamp: number) => {
   });
 };
 
-// Lifecycle - ПРОСТАЯ И РАБОЧАЯ ВЕРСИЯ
+// Watch for loadedChats changes to debug
+watch(
+  loadedChats,
+  (newChats) => {
+    console.log("🔄 loadedChats updated:", newChats);
+  },
+  { deep: true }
+);
+
 onMounted(async () => {
   console.log("🔄 Chat component mounted");
 
-  // ПРИНУДИТЕЛЬНАЯ ПРОВЕРКА АВТОРИЗАЦИИ
   const isAuthed = auth.checkAuth();
   console.log("🔍 Auth check result:", isAuthed);
   console.log("🔍 Auth user:", auth.user);
-  console.log("🔍 Auth isAuthenticated:", auth.isAuthenticated.value);
 
   if (isAuthed && auth.user?.id) {
     console.log("✅ User authenticated, initializing chat...");
@@ -255,8 +241,6 @@ onMounted(async () => {
     isAuthInitialized.value = true;
   } else {
     console.error("❌ User not authenticated even after check");
-
-    // ПРЯМАЯ ПРОВЕРКА localStorage
     if (process.client) {
       const savedUser = localStorage.getItem("chat-user");
       console.log("🔍 Direct localStorage check:", savedUser);
@@ -264,7 +248,7 @@ onMounted(async () => {
         console.log("🔄 Trying to manually restore user from localStorage...");
         try {
           const userData = JSON.parse(savedUser);
-          // @ts-ignore - временное решение
+          // @ts-ignore
           auth.user = userData;
           console.log("✅ Manually restored user:", userData);
           await initializeChat();
@@ -277,7 +261,6 @@ onMounted(async () => {
   }
 });
 
-// Auto-scroll when new messages arrive
 watch(currentMessages, () => {
   nextTick(() => scrollToBottom());
 });
@@ -373,6 +356,12 @@ const items = [
                 Загрузка...
               </div>
               <div
+                v-else-if="displayChats.length === 0"
+                class="p-4 text-center text-gray-500"
+              >
+                Нет чатов. Создайте первый чат!
+              </div>
+              <div
                 v-else
                 v-for="chat in displayChats"
                 :key="chat.id"
@@ -437,14 +426,6 @@ const items = [
                         : 'bg-white text-gray-800 rounded-bl-none border'
                     "
                   >
-                    <div
-                      class="text-xs font-semibold mb-1"
-                      :class="
-                        message.sender === currentUser
-                          ? 'text-blue-100'
-                          : 'text-gray-500'
-                      "
-                    ></div>
                     <div class="flex justify-between">
                       <div class="text-sm">{{ message.text }}</div>
                       <div

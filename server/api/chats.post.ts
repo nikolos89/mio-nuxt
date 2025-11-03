@@ -29,7 +29,7 @@ export default defineEventHandler(async (event) => {
       const apiKey =
         "GGMnEv_F6rZjnMQqCousEmqhlOJm0LuodrHnUxfpJRxzqI41u4t-Tjze8Qpk3XFRIwiRd9SB-R_0pcCji1agVA";
 
-      await $fetch("http://localhost:8000/api", {
+      const centrifugoResponse = await $fetch("http://localhost:8000/api", {
         method: "POST",
         headers: {
           Authorization: `apikey ${apiKey}`,
@@ -39,12 +39,24 @@ export default defineEventHandler(async (event) => {
           method: "publish",
           params: {
             channel: "chats:updates",
-            data: { chat },
+            data: {
+              chat: {
+                id: chat.id,
+                name: chat.name,
+                userCount: chat.userCount || 1,
+                lastMessage: chat.lastMessage || "Нет сообщений",
+              },
+              action: "created", // Добавляем действие
+              timestamp: Date.now(),
+            },
           },
         }),
       });
 
-      console.log("✅ Chat update published to Centrifugo");
+      console.log(
+        "✅ Chat update published to Centrifugo:",
+        centrifugoResponse
+      );
     } catch (centrifugoError) {
       console.error(
         "❌ Centrifugo publish failed, but chat saved:",
