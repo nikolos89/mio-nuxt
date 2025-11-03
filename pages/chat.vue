@@ -37,10 +37,24 @@ const messagesContainer = ref<HTMLElement>();
 
 const messagesStore = useMessagesStore();
 
+// Добавь watch для отладки
+watch(
+  () => messagesStore.messages,
+  (newMessages) => {
+    console.log("🔍 Messages store updated:", newMessages);
+  },
+  { deep: true }
+);
+
 // Замени computed currentMessages
 const currentMessages = computed(() => {
   if (!selectedChat.value) return [];
   return messagesStore.getMessages(selectedChat.value.id);
+});
+
+// И для текущих сообщений
+watch(currentMessages, (newCurrentMessages) => {
+  console.log("🔍 Current messages updated:", newCurrentMessages);
 });
 
 // Добавь computed для чатов
@@ -192,6 +206,20 @@ const sendMessage = async () => {
   };
 
   try {
+    // НЕМЕДЛЕННО добавляем сообщение в хранилище
+    const messagesStore = useMessagesStore();
+    messagesStore.addMessage(selectedChat.value.id, message);
+
+    // Обновляем последнее сообщение в чате
+    updateChatLastMessage(selectedChat.value.id, newMessage.value);
+
+    // Очищаем поле ввода
+    newMessage.value = "";
+
+    // Скроллим вниз
+    nextTick(() => scrollToBottom());
+
+    // Затем отправляем на сервер
     await $fetch("/api/centrifugo/publish", {
       method: "POST",
       body: {
@@ -200,11 +228,10 @@ const sendMessage = async () => {
       },
     });
 
-    // Сообщение автоматически добавится через Centrifugo подписку
-    newMessage.value = "";
-    nextTick(() => scrollToBottom());
+    console.log("✅ Message sent to server");
   } catch (error) {
     console.error("Failed to send message:", error);
+    // Можно показать уведомление пользователю
   }
 };
 

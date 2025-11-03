@@ -137,11 +137,36 @@ export const useCentrifuge = () => {
 
               // Подписываемся на новые сообщения
               subscribe(`chat:${chat.id}`, (data) => {
-                console.log("📨 New message:", data);
+                console.log("📨 New real-time message:", data);
                 const messagesStore = useMessagesStore();
 
+                // Обрабатываем разные форматы данных
                 if (data.message) {
                   messagesStore.addMessage(chat.id, data.message);
+                  console.log(
+                    `✅ Real-time message added to chat ${chat.id}:`,
+                    data.message
+                  );
+                } else if (data.data && data.data.message) {
+                  messagesStore.addMessage(chat.id, data.data.message);
+                  console.log(
+                    `✅ Real-time message added to chat ${chat.id}:`,
+                    data.data.message
+                  );
+                } else {
+                  // Если пришел raw data, создаем сообщение
+                  const message = {
+                    id: Date.now().toString(),
+                    text: data.text || JSON.stringify(data),
+                    sender: data.sender || "unknown",
+                    timestamp: data.timestamp || Date.now(),
+                    chatId: chat.id,
+                  };
+                  messagesStore.addMessage(chat.id, message);
+                  console.log(
+                    `✅ Converted real-time message added to chat ${chat.id}:`,
+                    message
+                  );
                 }
               });
             }
@@ -201,12 +226,12 @@ export const useCentrifuge = () => {
       const sub = centrifuge.value.newSubscription(channel);
 
       sub.on("publication", (ctx: any) => {
-        console.log(`📨 Message on ${channel}:`, ctx.data);
+        console.log(`📨 Publication on ${channel}:`, ctx.data);
         callback(ctx.data);
       });
 
       sub.on("subscribed", (ctx: any) => {
-        console.log(`✅ Subscribed to ${channel}`);
+        console.log(`✅ Successfully subscribed to ${channel}`);
       });
 
       sub.on("error", (err: any) => {
