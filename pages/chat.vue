@@ -21,6 +21,12 @@ interface Message {
   chatId: string;
 }
 
+interface User {
+  id: string;
+  phone: string;
+  name: string;
+}
+
 // Composables
 const { connect, isConnected, connectionError, loadedChats, addNewChat } =
   useCentrifuge();
@@ -35,6 +41,9 @@ const messagesContainer = ref<HTMLElement>();
 const searchUser = ref("");
 const isOpen = ref(false);
 const isAuthInitialized = ref(false);
+const searchResults = ref<User[]>([]);
+const showSearchResults = ref(false);
+const searchTimeout = ref<NodeJS.Timeout | null>(null);
 
 // Computed
 const currentMessages = computed(() => {
@@ -132,6 +141,93 @@ watch(newMessage, () => {
   });
 });
 
+// НОВЫЙ МЕТОД: Поиск пользователей
+const searchUsers = async () => {
+  if (!searchUser.value.trim()) {
+    searchResults.value = [];
+    showSearchResults.value = false;
+    return;
+  }
+
+  try {
+    console.log("🔍 Searching users for:", searchUser.value);
+
+    const { data, error } = await useFetch("/api/users", {
+      method: "GET",
+      query: { phone: searchUser.value },
+    });
+
+    if (error.value) {
+      console.error("❌ Search error:", error.value);
+      return;
+    }
+
+    if (data.value?.users) {
+      searchResults.value = data.value.users;
+      showSearchResults.value = true;
+      console.log(`✅ Found ${searchResults.value.length} users`);
+    }
+  } catch (error) {
+    console.error("❌ Failed to search users:", error);
+  }
+};
+
+// НОВЫЙ МЕТОД: Обработка ввода в поиске
+const handleSearchInput = () => {
+  // Очищаем предыдущий таймаут
+  if (searchTimeout.value) {
+    clearTimeout(searchTimeout.value);
+  }
+
+  // Устанавливаем новый таймаут на 2 секунды
+  searchTimeout.value = setTimeout(() => {
+    searchUsers();
+  }, 2000);
+};
+
+// НОВЫЙ МЕТОД: Создание чата с пользователем
+const createChatWithUser = async (user: User) => {
+  const chatId = `${currentUser.value}_${user.id}_${Date.now()}`;
+  const newChat: Chat = {
+    id: chatId,
+    name: `Чат с ${user.phone}`,
+    userCount: 2,
+    lastMessage: "Нет сообщений",
+  };
+
+  try {
+    console.log("🔄 Creating chat with user:", user);
+
+    // СНАЧАЛА ДОБАВЛЯЕМ ЧАТ ЛОКАЛЬНО - чтобы сразу отобразился
+    addNewChat(newChat);
+    console.log("✅ Chat added locally, now selecting:", newChat);
+
+    // Выбираем созданный чат сразу
+    selectChat(newChat);
+
+    // Скрываем результаты поиска и очищаем поле
+    showSearchResults.value = false;
+    searchUser.value = "";
+
+    // ПОТОМ отправляем на сервер
+    const response = await $fetch("/api/chats", {
+      method: "POST",
+      body: {
+        chat: newChat,
+      },
+    });
+
+    if (response.success) {
+      console.log("✅ Chat created successfully on server:", newChat);
+    } else {
+      console.error("❌ Failed to create chat on server:", response.error);
+    }
+  } catch (error) {
+    console.error("❌ Error creating chat on server:", error);
+    // Чат уже добавлен локально, так что пользователь не заметит ошибки
+  }
+};
+
 const createNewChat = async () => {
   const newChatId = Date.now().toString();
   const newChat: Chat = {
@@ -222,6 +318,11 @@ const formatTime = (timestamp: number) => {
   });
 };
 
+// Закрытие результатов поиска при клике вне области
+const closeSearchResults = () => {
+  showSearchResults.value = false;
+};
+
 // Watch for loadedChats changes to debug
 watch(
   loadedChats,
@@ -270,6 +371,8 @@ watch(currentMessages, () => {
 
 function clearsearchUser() {
   searchUser.value = "";
+  searchResults.value = [];
+  showSearchResults.value = false;
 }
 
 const items = [
@@ -283,7 +386,7 @@ const items = [
 </script>
 
 <template>
-  <div class="min-h-screen bg-gray-100">
+  <div class="min-h-screen bg-gray-100" @click="closeSearchResults">
     <div class="bg-white shadow-sm border-b">
       <div
         class="max-w-6xl mx-auto px-4 py-3 flex justify-between items-center"
@@ -326,11 +429,13 @@ const items = [
             <div class="pt-4 px-4 w-full relative">
               <input
                 v-model="searchUser"
+                @input="handleSearchInput"
                 type="text"
                 maxlength="25"
                 placeholder="Найти пользователя..."
                 class="w-full pr-7 rounded-lg px-4 py-2 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-100 transition-colors"
                 :disabled="!isConnected"
+                @click.stop
               />
               <Search
                 class="absolute right-6 top-1/2 transform -translate-y-1 text-gray-400 hover:text-gray-600 cursor-pointer transition-colors"
@@ -342,6 +447,34 @@ const items = [
                 @click="clearsearchUser()"
                 v-if="searchUser"
               />
+
+              <!-- Результаты поиска -->
+              <div
+                v-if="showSearchResults && searchResults.length > 0"
+                class="absolute top-full left-0 right-0 bg-white border border-gray-200 rounded-lg shadow-lg mt-1 max-h-60 overflow-y-auto z-10"
+                @click.stop
+              >
+                <div
+                  v-for="user in searchResults"
+                  :key="user.id"
+                  @click="createChatWithUser(user)"
+                  class="px-4 py-3 hover:bg-blue-50 cursor-pointer transition-colors border-b border-gray-100 last:border-b-0"
+                >
+                  <div class="font-medium text-gray-800">{{ user.phone }}</div>
+                  <div class="text-sm text-gray-500">{{ user.name }}</div>
+                </div>
+              </div>
+
+              <!-- Сообщение "ничего не найдено" -->
+              <div
+                v-if="showSearchResults && searchResults.length === 0"
+                class="absolute top-full left-0 right-0 bg-white border border-gray-200 rounded-lg shadow-lg mt-1 z-10"
+                @click.stop
+              >
+                <div class="px-4 py-3 text-gray-500 text-center">
+                  Пользователи не найдены
+                </div>
+              </div>
             </div>
 
             <div class="p-4 border-b">

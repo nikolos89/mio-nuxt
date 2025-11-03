@@ -1,3 +1,6 @@
+// server/api/login.post.ts
+import { getRedis } from "../utils/redis";
+
 export default defineEventHandler(async (event) => {
   try {
     const body = await readBody(event);
@@ -26,6 +29,24 @@ export default defineEventHandler(async (event) => {
     });
 
     console.log(`🔐 Код для ${phone}: ${code}`); // В продакшене убрать!
+
+    // СОХРАНЯЕМ/ОБНОВЛЯЕМ ПОЛЬЗОВАТЕЛЯ В REDIS ДЛЯ ПОИСКА
+    const redis = getRedis();
+    const userId = `user-${phone}`; // Генерируем ID пользователя
+    const userKey = `user:${userId}`;
+
+    try {
+      await redis.hset(userKey, {
+        id: userId,
+        phone: phone,
+        name: phone, // Используем номер телефона как имя по умолчанию
+        createdAt: Date.now().toString(),
+      });
+      console.log(`✅ User saved to Redis: ${phone} (${userId})`);
+    } catch (redisError) {
+      console.error("❌ Failed to save user to Redis:", redisError);
+      // Продолжаем выполнение даже если Redis недоступен
+    }
 
     return {
       success: true,
