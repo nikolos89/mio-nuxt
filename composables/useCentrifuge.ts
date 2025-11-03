@@ -105,7 +105,8 @@ export const useCentrifuge = () => {
           debug: true,
           minReconnectDelay: 1000,
           maxReconnectDelay: 10000,
-          maxServerPingDelay: 30, // ✅ количество попоыток подключения
+
+          maxServerPingDelay: 30, // ✅ количество поп
           getToken: async function () {
             console.log("🔄 Token refresh requested");
             try {
