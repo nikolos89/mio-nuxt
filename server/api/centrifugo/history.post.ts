@@ -22,20 +22,30 @@ export default defineEventHandler(async (event) => {
     const messages = await redis.xrevrange(streamKey, "+", "-", "COUNT", limit);
 
     const parsedMessages = messages.map(([id, fields]) => {
-      const dataField = fields.find((f, i) => i % 2 === 0 && f === "data")
-        ? fields[fields.indexOf("data") + 1]
-        : null;
-
-      let data = null;
-      try {
-        data = JSON.parse(dataField || "{}");
-      } catch {
-        data = { raw: dataField };
+      // Ищем поле "data" в массиве [key1, value1, key2, value2, ...]
+      let dataField = null;
+      for (let i = 0; i < fields.length; i += 2) {
+        if (fields[i] === "data") {
+          dataField = fields[i + 1];
+          break;
+        }
       }
 
+      let data = null;
+      if (dataField) {
+        try {
+          data = JSON.parse(dataField);
+        } catch (e) {
+          console.error("❌ Failed to parse message data:", dataField, e);
+          data = { error: "Invalid JSON", raw: dataField };
+        }
+      }
+
+      // Возвращаем сообщение в правильном формате
       return {
         id,
-        ...data.message,
+        data: data || {}, // Все данные сообщения
+        ...(data?.message || {}), // Распаковываем message если есть
       };
     });
 

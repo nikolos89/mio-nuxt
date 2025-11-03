@@ -1,10 +1,33 @@
+// server/api/centrifugo/publish.post.ts
+import { getRedis } from "../../utils/redis";
+
 export default defineEventHandler(async (event) => {
-  const apiKey =
-    "GGMnEv_F6rZjnMQqCousEmqhlOJm0LuodrHnUxfpJRxzqI41u4t-Tjze8Qpk3XFRIwiRd9SB-R_0pcCji1agVA";
   const body = await readBody(event);
+  const { channel, data } = body;
+
+  if (!channel) {
+    throw createError({ statusCode: 400, message: "Channel is required" });
+  }
+
+  const redis = getRedis();
+  const streamKey = `centrifugo.stream.${channel}`;
 
   try {
-    const response = await $fetch("http://mio-messenger.com:8000/api", {
+    // Сохраняем сообщение в Redis
+    const messageId = await redis.xadd(
+      streamKey,
+      "*",
+      "data",
+      JSON.stringify(data) // Сохраняем как JSON строку
+    );
+
+    console.log(`✅ Message saved to Redis: ${channel}, id: ${messageId}`);
+
+    // Также отправляем в Centrifugo для реального времени
+    const apiKey =
+      "GGMnEv_F6rZjnMQqCousEmqhlOJm0LuodrHnUxfpJRxzqI41u4t-Tjze8Qpk3XFRIwiRd9SB-R_0pcCji1agVA";
+
+    const centrifugoResponse = await $fetch("http://localhost:8000/api", {
       method: "POST",
       headers: {
         Authorization: `apikey ${apiKey}`,
@@ -13,20 +36,22 @@ export default defineEventHandler(async (event) => {
       body: JSON.stringify({
         method: "publish",
         params: {
-          channel: body.channel,
-          data: body.data,
+          channel: channel,
+          data: data,
         },
       }),
     });
 
     return {
       success: true,
-      data: response,
+      redisId: messageId,
+      centrifugo: centrifugoResponse,
     };
   } catch (error: any) {
-    return {
-      success: false,
-      error: error.message,
-    };
+    console.error("❌ Publish error:", error);
+    throw createError({
+      statusCode: 500,
+      message: "Failed to publish message",
+    });
   }
 });
