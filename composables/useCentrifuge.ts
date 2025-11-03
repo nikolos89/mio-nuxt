@@ -10,17 +10,17 @@ interface CentrifugeContext {
 interface Chat {
   id: string;
   name: string;
-  userCount: number; // ДОБАВЬ ЭТО
-  lastMessage?: string; // ДОБАВЬ ЭТО (опционально)
+  userCount: number;
+  lastMessage?: string;
 }
 
 export const useCentrifuge = () => {
+  const currentUserId = ref("");
   const centrifuge = ref<Centrifuge | null>(null);
   const isConnected = ref(false);
   const connectionError = ref<string>("");
   const reconnectAttempts = ref(0);
-  const maxReconnectAttempts = 5;
-  const loadedChats = ref<Chat[]>([]); // Добавляем реактивные чаты
+  const loadedChats = ref<Chat[]>([]);
 
   // Функция загрузки истории
   const loadHistory = async (channel: string) => {
@@ -53,12 +53,11 @@ export const useCentrifuge = () => {
         method: "GET",
       });
 
-      // Добавляем недостающие поля для интерфейса
       return (response.chats || []).map((chat) => ({
         id: chat.id,
         name: chat.name,
         userCount: chat.userCount || 1,
-        lastMessage: chat.lastMessage || "Нет сообщений", // Используй из API если есть
+        lastMessage: chat.lastMessage || "Нет сообщений",
       }));
     } catch (error) {
       console.error("❌ Failed to load user chats:", error);
@@ -66,21 +65,18 @@ export const useCentrifuge = () => {
     }
   };
 
-  // Замени функцию addMessagesToChat
+  // Функция добавления сообщений в чат
   const addMessagesToChat = (chatId: string, messages: any[]) => {
     const messagesStore = useMessagesStore();
 
-    // Обрабатываем сообщения из history API
     const processedMessages = messages
       .map((msg) => {
-        // Если сообщение пришло из data.message (новый формат)
         if (msg.data && msg.data.message) {
           return msg.data.message;
         }
-        // Если сообщение уже в правильном формате
         return msg;
       })
-      .filter((msg) => msg && msg.id); // Фильтруем валидные сообщения
+      .filter((msg) => msg && msg.id);
 
     console.log(
       `✅ Adding ${processedMessages.length} processed messages to chat ${chatId}`,
@@ -90,7 +86,9 @@ export const useCentrifuge = () => {
     messagesStore.addMessages(chatId, processedMessages);
   };
 
-  const connect = async (token: string): Promise<boolean> => {
+  const connect = async (token: string, userId: string): Promise<boolean> => {
+    currentUserId.value = userId;
+
     return new Promise((resolve) => {
       try {
         connectionError.value = "";
@@ -106,8 +104,25 @@ export const useCentrifuge = () => {
           token: token,
           debug: true,
           minReconnectDelay: 1000,
-          maxReconnectDelay: 5000,
-          maxReconnectAttempts: maxReconnectAttempts,
+          maxReconnectDelay: 10000,
+          maxServerPingDelay: 30, // ✅ количество попоыток подключения
+          getToken: async function () {
+            console.log("🔄 Token refresh requested");
+            try {
+              const { data: tokenData } = await $fetch("/api/token", {
+                method: "POST",
+                body: { userId: currentUserId.value },
+              });
+
+              if (tokenData?.token) {
+                console.log("✅ New token received");
+                return tokenData.token;
+              }
+            } catch (error) {
+              console.error("❌ Failed to refresh token:", error);
+            }
+            return token;
+          },
         });
 
         centrifuge.value.on("connecting", (ctx: CentrifugeContext) => {
@@ -124,7 +139,7 @@ export const useCentrifuge = () => {
           // Загружаем чаты и историю
           try {
             const userChats = await loadUserChats();
-            loadedChats.value = userChats; // Сохраняем чаты
+            loadedChats.value = userChats;
             console.log(`📋 Loaded ${userChats.length} chats`);
 
             // Для каждого чата загружаем историю
@@ -140,7 +155,6 @@ export const useCentrifuge = () => {
                 console.log("📨 New real-time message:", data);
                 const messagesStore = useMessagesStore();
 
-                // Обрабатываем разные форматы данных
                 if (data.message) {
                   messagesStore.addMessage(chat.id, data.message);
                   console.log(
@@ -152,20 +166,6 @@ export const useCentrifuge = () => {
                   console.log(
                     `✅ Real-time message added to chat ${chat.id}:`,
                     data.data.message
-                  );
-                } else {
-                  // Если пришел raw data, создаем сообщение
-                  const message = {
-                    id: Date.now().toString(),
-                    text: data.text || JSON.stringify(data),
-                    sender: data.sender || "unknown",
-                    timestamp: data.timestamp || Date.now(),
-                    chatId: chat.id,
-                  };
-                  messagesStore.addMessage(chat.id, message);
-                  console.log(
-                    `✅ Converted real-time message added to chat ${chat.id}:`,
-                    message
                   );
                 }
               });
@@ -181,9 +181,14 @@ export const useCentrifuge = () => {
           console.log("❌ Disconnected from Centrifugo:", ctx.reason);
           isConnected.value = false;
           connectionError.value = `Отключено: ${ctx.reason}`;
-          if (reconnectAttempts.value >= maxReconnectAttempts) {
-            resolve(false);
-          }
+
+          // Автоматически переподключаемся через 2 секунды
+          setTimeout(() => {
+            if (centrifuge.value && !isConnected.value) {
+              console.log("🔄 Auto-reconnecting after disconnect...");
+              centrifuge.value.connect();
+            }
+          }, 2000);
         });
 
         centrifuge.value.on("error", (err: any) => {
@@ -201,13 +206,14 @@ export const useCentrifuge = () => {
 
         centrifuge.value.connect();
 
+        // Увеличиваем таймаут подключения
         setTimeout(() => {
           if (!isConnected.value) {
             console.log("⏰ Connection timeout");
             connectionError.value = "Таймаут подключения";
             resolve(false);
           }
-        }, 10000);
+        }, 15000);
       } catch (error: any) {
         console.error("Connection setup error:", error);
         connectionError.value = `Setup error: ${error}`;
