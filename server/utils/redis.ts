@@ -5,9 +5,9 @@ let redis;
 export const getRedis = () => {
   if (!redis) {
     redis = new Redis({
-      host: "45.59.119.225", // IP твоего сервера с Redis
+      host: "127.0.0.1", // ← ИСПРАВЬ ЗДЕСЬ
       port: 6379,
-      password: "OsMQOwwKs4Q1SkvZ_7Sx0Q",
+      password: "",
       db: 0,
     });
   }
