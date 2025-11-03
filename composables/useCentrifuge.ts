@@ -98,17 +98,18 @@ export const useCentrifuge = () => {
         };
 
         const wsUrl = getWsUrl();
-        console.log(`🔗 Connecting to: ${wsUrl}`);
+        console.log(`🔗 Connecting to: ${wsUrl} for user: ${userId}`);
 
         centrifuge.value = new Centrifuge(wsUrl, {
           token: token,
           debug: true,
           minReconnectDelay: 1000,
           maxReconnectDelay: 10000,
-
-          maxServerPingDelay: 30, // ✅ количество поп
           getToken: async function () {
-            console.log("🔄 Token refresh requested");
+            console.log(
+              "🔄 Token refresh requested for user:",
+              currentUserId.value
+            );
             try {
               const { data: tokenData } = await $fetch("/api/token", {
                 method: "POST",
@@ -141,7 +142,9 @@ export const useCentrifuge = () => {
           try {
             const userChats = await loadUserChats();
             loadedChats.value = userChats;
-            console.log(`📋 Loaded ${userChats.length} chats`);
+            console.log(
+              `📋 Loaded ${userChats.length} chats for user: ${currentUserId.value}`
+            );
 
             // Для каждого чата загружаем историю
             for (const chat of userChats) {

@@ -1,7 +1,5 @@
 <script setup lang="ts">
 import { SendHorizontal, CheckCheck, Search, X } from "lucide-vue-next";
-// Если хранилище в stores/index.ts
-// import { useMessagesStore } from '~/stores';
 
 definePageMeta({
   middleware: "auth",
@@ -26,38 +24,25 @@ interface Message {
 // Composables
 const { connect, subscribe, isConnected, connectionError, loadedChats } =
   useCentrifuge();
-
-// State
-const currentUser = ref("");
-const chats = ref<Chat[]>([]);
-const selectedChat = ref<Chat | null>(null);
-// const chatMessages = ref<Record<string, Message[]>>({});
-const newMessage = ref("");
-const messagesContainer = ref<HTMLElement>();
-
+const auth = useAuth();
 const messagesStore = useMessagesStore();
 
-// Добавь watch для отладки
-watch(
-  () => messagesStore.messages,
-  (newMessages) => {
-    console.log("🔍 Messages store updated:", newMessages);
-  },
-  { deep: true }
-);
+// State - используем ID пользователя из авторизации
+const currentUser = computed(() => auth.user?.id || "");
+const chats = ref<Chat[]>([]);
+const selectedChat = ref<Chat | null>(null);
+const newMessage = ref("");
+const messagesContainer = ref<HTMLElement>();
+const searchUser = ref("");
+const isOpen = ref(false);
+const isAuthInitialized = ref(false);
 
-// Замени computed currentMessages
+// Computed
 const currentMessages = computed(() => {
   if (!selectedChat.value) return [];
   return messagesStore.getMessages(selectedChat.value.id);
 });
 
-// И для текущих сообщений
-watch(currentMessages, (newCurrentMessages) => {
-  console.log("🔍 Current messages updated:", newCurrentMessages);
-});
-
-// Добавь computed для чатов
 const displayChats = computed(() => {
   return loadedChats.value.length > 0 ? loadedChats.value : chats.value;
 });
@@ -65,7 +50,12 @@ const displayChats = computed(() => {
 // Methods
 const initializeChat = async () => {
   try {
-    console.log("🔄 Initializing chat...");
+    console.log("🔄 Initializing chat for user:", currentUser.value);
+
+    if (!currentUser.value) {
+      console.error("❌ No user ID available");
+      return;
+    }
 
     const { data: tokenData, error } = await useFetch("/api/token", {
       method: "POST",
@@ -81,12 +71,11 @@ const initializeChat = async () => {
 
     if (tokenData.value?.token) {
       console.log("✅ Token received, connecting...");
-      const connected = await connect(tokenData.value.token);
+      const connected = await connect(tokenData.value.token, currentUser.value);
 
       if (connected) {
         console.log("🎉 Successfully connected to Centrifugo!");
 
-        // Подписываемся на все чаты
         // Подписываемся на все чаты
         chats.value.forEach((chat) => {
           subscribe(`chat:${chat.id}`, (data) => {
@@ -235,14 +224,6 @@ const sendMessage = async () => {
   }
 };
 
-// const updateChatLastMessage = (chatId: string, message: string) => {
-//   const chat = chats.value.find((c) => c.id === chatId);
-//   if (chat) {
-//     chat.lastMessage =
-//       message.length > 50 ? message.substring(0, 50) + "..." : message;
-//   }
-// };
-
 const scrollToBottom = () => {
   if (messagesContainer.value) {
     messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight;
@@ -256,19 +237,42 @@ const formatTime = (timestamp: number) => {
   });
 };
 
-// Lifecycle
-// В mounted убери старую логику подписки - она теперь в useCentrifuge
-onMounted(() => {
-  const savedUser = localStorage.getItem("chat-username");
-  if (savedUser) {
-    currentUser.value = savedUser;
-  } else {
-    const newUser = "user-" + Math.random().toString(36).substr(2, 5);
-    currentUser.value = newUser;
-    localStorage.setItem("chat-username", newUser);
-  }
+// Lifecycle - ПРОСТАЯ И РАБОЧАЯ ВЕРСИЯ
+onMounted(async () => {
+  console.log("🔄 Chat component mounted");
 
-  initializeChat(); // Это загрузит чаты и историю через useCentrifuge
+  // ПРИНУДИТЕЛЬНАЯ ПРОВЕРКА АВТОРИЗАЦИИ
+  const isAuthed = auth.checkAuth();
+  console.log("🔍 Auth check result:", isAuthed);
+  console.log("🔍 Auth user:", auth.user);
+  console.log("🔍 Auth isAuthenticated:", auth.isAuthenticated.value);
+
+  if (isAuthed && auth.user?.id) {
+    console.log("✅ User authenticated, initializing chat...");
+    await initializeChat();
+    isAuthInitialized.value = true;
+  } else {
+    console.error("❌ User not authenticated even after check");
+
+    // ПРЯМАЯ ПРОВЕРКА localStorage
+    if (process.client) {
+      const savedUser = localStorage.getItem("chat-user");
+      console.log("🔍 Direct localStorage check:", savedUser);
+      if (savedUser) {
+        console.log("🔄 Trying to manually restore user from localStorage...");
+        try {
+          const userData = JSON.parse(savedUser);
+          // @ts-ignore - временное решение
+          auth.user = userData;
+          console.log("✅ Manually restored user:", userData);
+          await initializeChat();
+          isAuthInitialized.value = true;
+        } catch (error) {
+          console.error("❌ Failed to manually restore user:", error);
+        }
+      }
+    }
+  }
 });
 
 // Auto-scroll when new messages arrive
@@ -276,15 +280,10 @@ watch(currentMessages, () => {
   nextTick(() => scrollToBottom());
 });
 
-const auth = useAuth();
-
-const searchUser = ref("");
-
 function clearsearchUser() {
   searchUser.value = "";
 }
 
-const isOpen = ref(false);
 const items = [
   [
     {
@@ -297,36 +296,6 @@ const items = [
 
 <template>
   <div class="min-h-screen bg-gray-100">
-    <!-- Header -->
-    <!-- <div class="bg-white shadow-sm border-b">
-      <div
-        class="max-w-6xl mx-auto px-4 py-3 flex justify-between items-center"
-      >
-        <div>
-          <h1 class="text-xl font-bold text-gray-800">Mio Messenger</h1>
-          <p class="text-sm text-gray-600">
-            Статус:
-            <span :class="isConnected ? 'text-green-600' : 'text-red-600'">
-              {{ isConnected ? "онлайн" : "офлайн" }}
-            </span>
-            <span v-if="connectionError" class="text-xs text-orange-600 ml-2">
-              ({{ connectionError }})
-            </span>
-          </p>
-        </div>
-        <div class="text-right flex items-center gap-4">
-          <p class="text-sm text-gray-600">
-            {{ auth.user?.phone }}
-          </p>
-          <button
-            @click="auth.logout()"
-            class="text-sm bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600 transition-colors"
-          >
-            Выйти
-          </button>
-        </div>
-      </div>
-    </div> -->
     <div class="bg-white shadow-sm border-b">
       <div
         class="max-w-6xl mx-auto px-4 py-3 flex justify-between items-center"
@@ -338,7 +307,6 @@ const items = [
             <div class="text-[#FF69B4]">o</div>
           </h1>
           <p class="text-sm text-gray-600">
-            <!-- Статус: -->
             <span :class="isConnected ? 'text-green-600' : 'text-red-600'">
               {{ isConnected ? "Онлайн" : "Офлайн" }}
             </span>
@@ -348,9 +316,10 @@ const items = [
           </p>
         </div>
         <div class="text-right flex items-center gap-4">
-          <p class="text-sm text-gray-600">
-            {{ auth.user }}
+          <p class="text-sm text-gray-600" v-if="auth.user">
+            {{ auth.user.phone }}
           </p>
+          <p class="text-sm text-red-600" v-else>Не авторизован</p>
           <button
             @click="auth.logout()"
             class="text-sm bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600 transition-colors"
@@ -366,8 +335,6 @@ const items = [
         <div class="flex h-[calc(100vh-110px)]">
           <!-- Sidebar - Список чатов -->
           <div class="w-1/4 border-r bg-gray-50 flex flex-col">
-            <!-- <div class="">.....</div> -->
-
             <div class="pt-4 px-4 w-full relative">
               <input
                 v-model="searchUser"
@@ -393,14 +360,18 @@ const items = [
               <button
                 @click="createNewChat"
                 class="w-full bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-600 transition-colors flex items-center justify-center gap-2"
+                :disabled="!auth.user"
               >
-                <!-- <span>+</span> -->
                 Новый чат
               </button>
             </div>
 
             <div class="flex-1 overflow-y-auto">
+              <div v-if="!auth.user" class="p-4 text-center text-gray-500">
+                Загрузка...
+              </div>
               <div
+                v-else
                 v-for="chat in displayChats"
                 :key="chat.id"
                 @click="selectChat(chat)"
@@ -411,18 +382,14 @@ const items = [
               >
                 <div class="flex flex-row gap-3 justify-between">
                   <div class="flex flex-row gap-3 flex-1 min-w-0">
-                    <!-- Добавлены flex-1 и min-w-0 -->
                     <div class="w-12 flex-shrink-0">
-                      <!-- Добавлен flex-shrink-0 -->
                       <nuxt-img
                         class="w-12 h-12 bg-green-200/50 rounded-full"
                         src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSWAk-mfGdhPFylzhxWsEXqJa6DR5KaCd2ThA&s"
                       />
                     </div>
                     <div class="flex-1 min-w-0">
-                      <!-- Добавлен min-w-0 -->
                       <div class="font-semibold text-gray-800 truncate">
-                        <!-- Добавлен truncate -->
                         {{ chat.name }}
                       </div>
                       <div class="text-sm text-gray-500 truncate mt-1">
@@ -436,33 +403,19 @@ const items = [
                     <div
                       class="flex flex-row gap-1 justify-center items-center text-center"
                     >
-                      <!-- Добавлен justify-end -->
                       <CheckCheck :size="15" color="#3b82f6" />
                       <div class="">11:55</div>
                     </div>
                     <div class="">23</div>
                   </div>
                 </div>
-                <!-- <div class="text-xs text-gray-400 mt-1">
-                  {{ chat.userCount }} участников
-                </div> -->
               </div>
             </div>
           </div>
 
           <!-- Main Chat Area -->
           <div class="flex-1 flex flex-col">
-            <template v-if="selectedChat">
-              <!-- Chat Header -->
-              <div class="p-4 border-b bg-white hidden">
-                <h2 class="font-semibold text-lg text-gray-800">
-                  {{ selectedChat.name }}
-                </h2>
-                <p class="text-sm text-gray-600">
-                  Чат ID: {{ selectedChat.id }}
-                </p>
-              </div>
-
+            <template v-if="selectedChat && auth.user">
               <!-- Messages -->
               <div
                 ref="messagesContainer"
@@ -489,9 +442,7 @@ const items = [
                           ? 'text-blue-100'
                           : 'text-gray-500'
                       "
-                    >
-                      <!-- {{ message.sender }} -->
-                    </div>
+                    ></div>
                     <div class="flex justify-between">
                       <div class="text-sm">{{ message.text }}</div>
                       <div
@@ -550,7 +501,10 @@ const items = [
             >
               <div class="text-center">
                 <div class="text-2xl mb-2">👋</div>
-                <div class="text-lg font-semibold">Выберите чат</div>
+                <div class="text-lg font-semibold" v-if="auth.user">
+                  Выберите чат
+                </div>
+                <div class="text-lg font-semibold" v-else>Загрузка...</div>
                 <div class="text-sm">или создайте новый для начала общения</div>
               </div>
             </div>

@@ -21,12 +21,12 @@ export default defineEventHandler(async (event) => {
     const { createHmac } = await import("node:crypto");
 
     // 10 лет в секундах
-    const tenYearsInSeconds = 10 * 365 * 24 * 60 * 60;
+    const oneDayInSeconds = 1 * 1 * 24 * 60 * 60; // 1 день в секундах
 
     const header = { alg: "HS256", typ: "JWT" };
     const payload = {
       sub: userId,
-      exp: Math.floor(Date.now() / 1000) + tenYearsInSeconds,
+      exp: Math.floor(Date.now() / 1000) + oneDayInSeconds,
     };
 
     const encodedHeader = Buffer.from(JSON.stringify(header)).toString(

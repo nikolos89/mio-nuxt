@@ -7,14 +7,41 @@ export const useAuth = () => {
   const user = ref<User | null>(null);
   const isAuthenticated = computed(() => !!user.value);
 
-  // Инициализация при загрузке
+  // Инициализация при загрузке - ФИКСИРОВАННАЯ ВЕРСИЯ
   const initAuth = () => {
     if (process.client) {
       const savedUser = localStorage.getItem("chat-user");
+      console.log("🔄 Auth init - localStorage chat-user:", savedUser);
       if (savedUser) {
-        user.value = JSON.parse(savedUser);
+        try {
+          user.value = JSON.parse(savedUser);
+          console.log("✅ Auth initialized with user:", user.value);
+        } catch (error) {
+          console.error("❌ Failed to parse saved user:", error);
+          localStorage.removeItem("chat-user");
+        }
+      } else {
+        console.log("ℹ️ No saved user found in localStorage");
       }
     }
+  };
+
+  // Принудительная проверка авторизации
+  const checkAuth = (): boolean => {
+    if (process.client) {
+      const savedUser = localStorage.getItem("chat-user");
+      if (savedUser && !user.value) {
+        try {
+          user.value = JSON.parse(savedUser);
+          console.log("✅ Auth checked and user restored:", user.value);
+          return true;
+        } catch (error) {
+          console.error("❌ Failed to parse user during check:", error);
+          return false;
+        }
+      }
+    }
+    return !!user.value;
   };
 
   // Вход - запрос кода
@@ -55,7 +82,9 @@ export const useAuth = () => {
         user.value = data.user;
         if (process.client) {
           localStorage.setItem("chat-user", JSON.stringify(data.user));
+          localStorage.setItem("chat-user-id", data.user.id);
         }
+        console.log("✅ User verified and saved:", data.user);
         return {
           success: true,
           user: data.user,
@@ -86,7 +115,9 @@ export const useAuth = () => {
       user.value = null;
       if (process.client) {
         localStorage.removeItem("chat-user");
+        localStorage.removeItem("chat-user-id");
       }
+      console.log("✅ User logged out");
       await navigateTo("/login");
     }
   };
@@ -101,5 +132,6 @@ export const useAuth = () => {
     verify,
     logout,
     initAuth,
+    checkAuth, // Добавляем новую функцию
   };
 };
