@@ -144,6 +144,14 @@ const createNewChat = async () => {
   try {
     console.log("🔄 Creating new chat:", newChat);
 
+    // СНАЧАЛА ДОБАВЛЯЕМ ЧАТ ЛОКАЛЬНО - чтобы сразу отобразился
+    addNewChat(newChat);
+    console.log("✅ Chat added locally, now selecting:", newChat);
+
+    // Выбираем созданный чат сразу
+    selectChat(newChat);
+
+    // ПОТОМ отправляем на сервер
     const response = await $fetch("/api/chats", {
       method: "POST",
       body: {
@@ -152,24 +160,19 @@ const createNewChat = async () => {
     });
 
     if (response.success) {
-      console.log("✅ Chat created successfully:", newChat);
-      console.log("📋 Current chats after creation:", loadedChats.value);
-
-      // Выбираем созданный чат
-      selectChat(newChat);
+      console.log("✅ Chat created successfully on server:", newChat);
     } else {
-      console.error("❌ Failed to create chat:", response.error);
+      console.error("❌ Failed to create chat on server:", response.error);
     }
   } catch (error) {
-    console.error("❌ Error creating chat:", error);
-    // Fallback
-    addNewChat(newChat);
-    selectChat(newChat);
+    console.error("❌ Error creating chat on server:", error);
+    // Чат уже добавлен локально, так что пользователь не заметит ошибки
   }
 };
 
 const selectChat = (chat: Chat) => {
   selectedChat.value = chat;
+  console.log("✅ Chat selected:", chat);
   nextTick(() => scrollToBottom());
 };
 

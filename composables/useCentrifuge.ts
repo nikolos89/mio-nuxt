@@ -98,7 +98,9 @@ export const useCentrifuge = () => {
     if (existingChatIndex === -1) {
       // Добавляем новый чат в начало списка
       loadedChats.value.unshift(chat);
-      console.log(`✅ New chat added: ${chat.name} (${chat.id})`);
+      console.log(
+        `✅ New chat added to loadedChats: ${chat.name} (${chat.id})`
+      );
 
       // Автоматически подписываемся на сообщения нового чата
       subscribeToChatMessages(chat.id);
@@ -199,6 +201,7 @@ export const useCentrifuge = () => {
       sub.on("publication", (ctx: any) => {
         console.log("🔄 Chat list update received:", ctx.data);
         if (ctx.data.chat) {
+          console.log("🎯 Adding chat from real-time update:", ctx.data.chat);
           addNewChat(ctx.data.chat);
         }
       });

@@ -46,7 +46,7 @@ export default defineEventHandler(async (event) => {
                 userCount: chat.userCount || 1,
                 lastMessage: chat.lastMessage || "Нет сообщений",
               },
-              action: "created", // Добавляем действие
+              action: "created",
               timestamp: Date.now(),
             },
           },
