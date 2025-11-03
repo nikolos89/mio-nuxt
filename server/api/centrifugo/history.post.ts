@@ -1,32 +1,15 @@
-// // server/api/centrifugo/history.post.ts
-// export default defineEventHandler(async (event) => {
-//   const body = await readBody(event);
-//   const { channel } = body;
-
-//   const response = await $fetch("https://mio-messenger.com/api/centrifugo", {
-//     method: "POST",
-//     headers: {
-//       Authorization: `apikey ${process.env.CENTRIFUGO_API_KEY}`,
-//       "Content-Type": "application/json",
-//     },
-//     body: JSON.stringify({
-//       method: "history",
-//       params: {
-//         channel: channel,
-//         limit: 100,
-//       },
-//     }),
-//   });
-
-//   return response;
-// });
-
 // server/api/centrifugo/history.post.ts
 import { getRedis } from "../../utils/redis";
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event);
-  const { channel, limit = 50 } = body;
+  const { method, params } = body;
+
+  if (method !== "history") {
+    throw createError({ statusCode: 400, message: "Method must be 'history'" });
+  }
+
+  const { channel, limit = 50 } = params || {};
 
   if (!channel) {
     throw createError({ statusCode: 400, message: "Channel is required" });
@@ -36,7 +19,6 @@ export default defineEventHandler(async (event) => {
   const streamKey = `centrifugo.stream.${channel}`;
 
   try {
-    // Читаем последние N сообщений из стрима
     const messages = await redis.xrevrange(streamKey, "+", "-", "COUNT", limit);
 
     const parsedMessages = messages.map(([id, fields]) => {
@@ -53,12 +35,12 @@ export default defineEventHandler(async (event) => {
 
       return {
         id,
-        ...data.message, // у тебя именно message внутри data
+        ...data.message,
       };
     });
 
     return {
-      messages: parsedMessages.reverse(), // в прямом порядке
+      messages: parsedMessages.reverse(),
       count: parsedMessages.length,
     };
   } catch (err) {
