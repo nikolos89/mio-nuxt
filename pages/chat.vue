@@ -1,7 +1,5 @@
 <script setup lang="ts">
 import { SendHorizontal, CheckCheck, Search, X } from "lucide-vue-next";
-// Если хранилище в stores/index.ts
-// import { useMessagesStore } from '~/stores';
 
 definePageMeta({
   middleware: "auth",
@@ -26,38 +24,24 @@ interface Message {
 // Composables
 const { connect, subscribe, isConnected, connectionError, loadedChats } =
   useCentrifuge();
-
-// State
-const currentUser = ref("");
-const chats = ref<Chat[]>([]);
-const selectedChat = ref<Chat | null>(null);
-// const chatMessages = ref<Record<string, Message[]>>({});
-const newMessage = ref("");
-const messagesContainer = ref<HTMLElement>();
-
+const auth = useAuth();
 const messagesStore = useMessagesStore();
 
-// Добавь watch для отладки
-watch(
-  () => messagesStore.messages,
-  (newMessages) => {
-    console.log("🔍 Messages store updated:", newMessages);
-  },
-  { deep: true }
-);
+// State - используем номер телефона из авторизации
+const currentUser = computed(() => auth.user?.phone || "");
+const chats = ref<Chat[]>([]);
+const selectedChat = ref<Chat | null>(null);
+const newMessage = ref("");
+const messagesContainer = ref<HTMLElement>();
+const searchUser = ref("");
+const isOpen = ref(false);
 
-// Замени computed currentMessages
+// Computed
 const currentMessages = computed(() => {
   if (!selectedChat.value) return [];
   return messagesStore.getMessages(selectedChat.value.id);
 });
 
-// И для текущих сообщений
-watch(currentMessages, (newCurrentMessages) => {
-  console.log("🔍 Current messages updated:", newCurrentMessages);
-});
-
-// Добавь computed для чатов
 const displayChats = computed(() => {
   return loadedChats.value.length > 0 ? loadedChats.value : chats.value;
 });
@@ -65,11 +49,16 @@ const displayChats = computed(() => {
 // Methods
 const initializeChat = async () => {
   try {
-    console.log("🔄 Initializing chat...");
+    console.log("🔄 Initializing chat for user:", currentUser.value);
+
+    if (!currentUser.value) {
+      console.error("❌ No user phone number available");
+      return;
+    }
 
     const { data: tokenData, error } = await useFetch("/api/token", {
       method: "POST",
-      body: { userId: currentUser.value },
+      body: { userId: currentUser.value }, // Используем номер телефона как userId
     });
 
     console.log("Token response:", tokenData.value, error.value);
@@ -81,27 +70,10 @@ const initializeChat = async () => {
 
     if (tokenData.value?.token) {
       console.log("✅ Token received, connecting...");
-      const connected = await connect(tokenData.value.token);
+      const connected = await connect(tokenData.value.token, currentUser.value);
 
       if (connected) {
         console.log("🎉 Successfully connected to Centrifugo!");
-
-        // Подписываемся на все чаты
-        // Подписываемся на все чаты
-        chats.value.forEach((chat) => {
-          subscribe(`chat:${chat.id}`, (data) => {
-            if (data.message && data.message.chatId === chat.id) {
-              const messagesStore = useMessagesStore();
-              messagesStore.addMessage(chat.id, data.message);
-              updateChatLastMessage(chat.id, data.message.text);
-
-              // Если это активный чат - скроллим вниз
-              if (selectedChat.value?.id === chat.id) {
-                nextTick(() => scrollToBottom());
-              }
-            }
-          });
-        });
       } else {
         console.error("❌ Failed to connect to Centrifugo");
       }
@@ -113,15 +85,14 @@ const initializeChat = async () => {
   }
 };
 
+// Остальные функции остаются без изменений...
 const updateChatLastMessage = (chatId: string, message: string) => {
-  // Обновляем в chats
   const chat = chats.value.find((c) => c.id === chatId);
   if (chat) {
     chat.lastMessage =
       message.length > 50 ? message.substring(0, 50) + "..." : message;
   }
 
-  // Обновляем в loadedChats
   const loadedChat = loadedChats.value.find((c) => c.id === chatId);
   if (loadedChat) {
     loadedChat.lastMessage =
@@ -130,43 +101,26 @@ const updateChatLastMessage = (chatId: string, message: string) => {
 };
 
 const handleKeydown = (event: KeyboardEvent) => {
-  if (event.key === "Enter") {
-    if (event.shiftKey) {
-      // Shift+Enter - позволяем браузеру добавить новую строку
-      // Ничего не делаем, браузер сам добавит \n
-    } else {
-      // Enter - отправка сообщения
-      event.preventDefault();
-
-      sendMessage();
-      calculateRows();
-    }
+  if (event.key === "Enter" && !event.shiftKey) {
+    event.preventDefault();
+    sendMessage();
+    calculateRows();
   }
 };
 
 const textareaRef = ref<HTMLTextAreaElement>();
 const textareaRows = ref(1);
 
-// Вычисляем количество строк для textarea
 const calculateRows = () => {
   if (!textareaRef.value) return 1;
-
   const textarea = textareaRef.value;
-  const lineHeight = 20; // Примерная высота строки в px
-  const padding = 24; // padding-top + padding-bottom
-
-  // Временно убираем ограничение по строкам для расчета
+  const lineHeight = 20;
+  const padding = 24;
   textarea.style.height = "auto";
   const contentHeight = textarea.scrollHeight - padding;
-  const calculatedRows = Math.max(
-    1,
-    Math.min(6, Math.floor(contentHeight / lineHeight))
-  );
-
-  return calculatedRows;
+  return Math.max(1, Math.min(6, Math.floor(contentHeight / lineHeight)));
 };
 
-// Следим за изменением текста и обновляем количество строк
 watch(newMessage, () => {
   nextTick(() => {
     textareaRows.value = calculateRows();
@@ -181,10 +135,8 @@ const createNewChat = () => {
     userCount: 1,
   };
 
-  // Добавляем в оба массива
   chats.value.unshift(newChat);
-  loadedChats.value.unshift(newChat); // ДОБАВЬ ЭТУ СТРОКУ
-
+  loadedChats.value.unshift(newChat);
   selectChat(newChat);
 };
 
@@ -200,26 +152,20 @@ const sendMessage = async () => {
   const message: Message = {
     id: Date.now().toString(),
     text: newMessage.value,
-    sender: currentUser.value,
+    sender: currentUser.value, // Теперь это номер телефона
     timestamp: Date.now(),
     chatId: selectedChat.value.id,
   };
 
   try {
-    // НЕМЕДЛЕННО добавляем сообщение в хранилище
+    // Немедленно добавляем сообщение в хранилище
     const messagesStore = useMessagesStore();
     messagesStore.addMessage(selectedChat.value.id, message);
-
-    // Обновляем последнее сообщение в чате
     updateChatLastMessage(selectedChat.value.id, newMessage.value);
-
-    // Очищаем поле ввода
     newMessage.value = "";
-
-    // Скроллим вниз
     nextTick(() => scrollToBottom());
 
-    // Затем отправляем на сервер
+    // Отправляем на сервер
     await $fetch("/api/centrifugo/publish", {
       method: "POST",
       body: {
@@ -231,17 +177,8 @@ const sendMessage = async () => {
     console.log("✅ Message sent to server");
   } catch (error) {
     console.error("Failed to send message:", error);
-    // Можно показать уведомление пользователю
   }
 };
-
-// const updateChatLastMessage = (chatId: string, message: string) => {
-//   const chat = chats.value.find((c) => c.id === chatId);
-//   if (chat) {
-//     chat.lastMessage =
-//       message.length > 50 ? message.substring(0, 50) + "..." : message;
-//   }
-// };
 
 const scrollToBottom = () => {
   if (messagesContainer.value) {
@@ -256,35 +193,23 @@ const formatTime = (timestamp: number) => {
   });
 };
 
-// Lifecycle
-// В mounted убери старую логику подписки - она теперь в useCentrifuge
-onMounted(() => {
-  const savedUser = localStorage.getItem("chat-username");
-  if (savedUser) {
-    currentUser.value = savedUser;
-  } else {
-    const newUser = "user-" + Math.random().toString(36).substr(2, 5);
-    currentUser.value = newUser;
-    localStorage.setItem("chat-username", newUser);
-  }
-
-  initializeChat(); // Это загрузит чаты и историю через useCentrifuge
-});
-
-// Auto-scroll when new messages arrive
-watch(currentMessages, () => {
-  nextTick(() => scrollToBottom());
-});
-
-const auth = useAuth();
-
-const searchUser = ref("");
-
 function clearsearchUser() {
   searchUser.value = "";
 }
 
-const isOpen = ref(false);
+// Lifecycle
+onMounted(() => {
+  // Убираем создание случайного пользователя
+  // Используем авторизованного пользователя из auth
+  if (auth.user?.phone) {
+    initializeChat();
+  }
+});
+
+watch(currentMessages, () => {
+  nextTick(() => scrollToBottom());
+});
+
 const items = [
   [
     {

@@ -16,6 +16,10 @@ const message = ref("");
 const messageType = ref<"success" | "error">("success");
 const loading = ref(false);
 
+// Refs для инпутов
+const phoneInput = ref<HTMLInputElement>();
+const codeInput = ref<HTMLInputElement>();
+
 // Валидация телефона
 const validatePhone = (phone: string): boolean => {
   const phoneRegex = /^\d{10,15}$/;
@@ -84,6 +88,11 @@ const handleSubmit = async () => {
         step.value = "code";
         message.value = result.message;
         messageType.value = "success";
+
+        // Фокусируемся на поле кода после перехода
+        nextTick(() => {
+          codeInput.value?.focus();
+        });
       } else {
         message.value = result.message;
         messageType.value = "error";
@@ -120,15 +129,29 @@ const handleSubmit = async () => {
   }
 };
 
-// Авто-редирект если уже авторизован
+// Авто-фокус при изменении шага
+watch(step, (newStep) => {
+  nextTick(() => {
+    if (newStep === "phone") {
+      phoneInput.value?.focus();
+    } else if (newStep === "code") {
+      codeInput.value?.focus();
+    }
+  });
+});
+
+// Авто-фокус при загрузке страницы
 onMounted(() => {
   if (auth.isAuthenticated.value) {
     navigateTo("/chat");
+    return;
   }
-});
 
-// const phoneError = ref("");
-// const loading = ref(false);
+  // Фокусируемся на поле телефона при загрузке
+  nextTick(() => {
+    phoneInput.value?.focus();
+  });
+});
 
 const formatPhone = (event: Event) => {
   const target = event.target as HTMLInputElement;
@@ -172,6 +195,7 @@ const formatPhone = (event: Event) => {
             Номер телефона
           </label>
           <input
+            ref="phoneInput"
             id="phone"
             v-model="phone"
             type="tel"
@@ -199,6 +223,7 @@ const formatPhone = (event: Event) => {
             Код подтверждения
           </label>
           <input
+            ref="codeInput"
             id="code"
             v-model="code"
             type="text"
@@ -211,17 +236,6 @@ const formatPhone = (event: Event) => {
           <p v-if="codeError" class="mt-2 text-sm text-red-600">
             {{ codeError }}
           </p>
-          <!-- <p class="mt-2 text-md text-gray-500 text-center">
-            Код отправлен на {{ phone }}
-            <button
-              type="button"
-              @click="requestNewCode"
-              class="text-blue-600 hover:text-blue-800 underline ml-1"
-              :disabled="loading"
-            >
-              Запросить новый код
-            </button>
-          </p> -->
         </div>
 
         <!-- Сообщения -->

@@ -1,3 +1,4 @@
+// useAuth.ts
 interface User {
   phone: string;
   id: string;
@@ -7,7 +8,6 @@ export const useAuth = () => {
   const user = ref<User | null>(null);
   const isAuthenticated = computed(() => !!user.value);
 
-  // Инициализация при загрузке
   const initAuth = () => {
     if (process.client) {
       const savedUser = localStorage.getItem("chat-user");
@@ -17,7 +17,6 @@ export const useAuth = () => {
     }
   };
 
-  // Вход - запрос кода
   const login = async (
     phone: string
   ): Promise<{ success: boolean; message: string }> => {
@@ -40,7 +39,6 @@ export const useAuth = () => {
     }
   };
 
-  // Проверка кода
   const verify = async (
     phone: string,
     code: string
@@ -52,13 +50,21 @@ export const useAuth = () => {
       });
 
       if (data.success && data.user) {
-        user.value = data.user;
+        // Сохраняем пользователя с номером телефона как ID
+        const userData = {
+          phone: phone,
+          id: phone, // Используем номер телефона как ID
+        };
+
+        user.value = userData;
         if (process.client) {
-          localStorage.setItem("chat-user", JSON.stringify(data.user));
+          localStorage.setItem("chat-user", JSON.stringify(userData));
+          // Сохраняем также номер телефона отдельно для useCentrifuge
+          localStorage.setItem("chat-username", phone);
         }
         return {
           success: true,
-          user: data.user,
+          user: userData,
           message: "Успешный вход",
         };
       }
@@ -76,7 +82,6 @@ export const useAuth = () => {
     }
   };
 
-  // Выход
   const logout = async (): Promise<void> => {
     try {
       await $fetch("/api/auth/logout", { method: "POST" });
@@ -86,12 +91,12 @@ export const useAuth = () => {
       user.value = null;
       if (process.client) {
         localStorage.removeItem("chat-user");
+        localStorage.removeItem("chat-username");
       }
       await navigateTo("/login");
     }
   };
 
-  // Инициализируем сразу
   initAuth();
 
   return {
