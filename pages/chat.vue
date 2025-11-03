@@ -22,8 +22,14 @@ interface Message {
 }
 
 // Composables
-const { connect, subscribe, isConnected, connectionError, loadedChats } =
-  useCentrifuge();
+const {
+  connect,
+  subscribe,
+  isConnected,
+  connectionError,
+  loadedChats,
+  addNewChat,
+} = useCentrifuge();
 const auth = useAuth();
 const messagesStore = useMessagesStore();
 
@@ -76,7 +82,7 @@ const initializeChat = async () => {
       if (connected) {
         console.log("🎉 Successfully connected to Centrifugo!");
 
-        // Подписываемся на все чаты
+        // Подписываемся на все чаты для сообщений
         chats.value.forEach((chat) => {
           subscribe(`chat:${chat.id}`, (data) => {
             if (data.message && data.message.chatId === chat.id) {
@@ -110,12 +116,14 @@ const updateChatLastMessage = (chatId: string, message: string) => {
       message.length > 50 ? message.substring(0, 50) + "..." : message;
   }
 
-  // Обновляем в loadedChats
-  const loadedChat = loadedChats.value.find((c) => c.id === chatId);
-  if (loadedChat) {
-    loadedChat.lastMessage =
-      message.length > 50 ? message.substring(0, 50) + "..." : message;
-  }
+  // Обновляем в loadedChats через composable
+  addNewChat({
+    id: chatId,
+    name: chat?.name || `Чат ${chatId}`,
+    userCount: chat?.userCount || 1,
+    lastMessage:
+      message.length > 50 ? message.substring(0, 50) + "..." : message,
+  });
 };
 
 const handleKeydown = (event: KeyboardEvent) => {
@@ -162,19 +170,44 @@ watch(newMessage, () => {
   });
 });
 
-const createNewChat = () => {
-  const newChatId = (chats.value.length + 1).toString();
+const createNewChat = async () => {
+  const newChatId = Date.now().toString(); // Используем timestamp как ID
   const newChat: Chat = {
     id: newChatId,
     name: `Чат ${newChatId}`,
     userCount: 1,
+    lastMessage: "Нет сообщений",
   };
 
-  // Добавляем в оба массива
-  chats.value.unshift(newChat);
-  loadedChats.value.unshift(newChat); // ДОБАВЬ ЭТУ СТРОКУ
+  try {
+    // Отправляем запрос на создание чата
+    const response = await $fetch("/api/chats", {
+      method: "POST",
+      body: {
+        chat: newChat,
+      },
+    });
 
-  selectChat(newChat);
+    if (response.success) {
+      console.log("✅ Chat created successfully:", newChat);
+
+      // Добавляем чат в оба массива
+      chats.value.unshift(newChat);
+      addNewChat(newChat);
+
+      // Выбираем созданный чат
+      selectChat(newChat);
+    } else {
+      console.error("❌ Failed to create chat:", response.error);
+    }
+  } catch (error) {
+    console.error("❌ Error creating chat:", error);
+
+    // Fallback: добавляем локально если сервер недоступен
+    chats.value.unshift(newChat);
+    addNewChat(newChat);
+    selectChat(newChat);
+  }
 };
 
 const selectChat = (chat: Chat) => {

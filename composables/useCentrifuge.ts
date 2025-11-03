@@ -86,6 +86,34 @@ export const useCentrifuge = () => {
     messagesStore.addMessages(chatId, processedMessages);
   };
 
+  // Функция добавления нового чата
+  const addNewChat = (chat: Chat) => {
+    // Проверяем, нет ли уже такого чата
+    const existingChatIndex = loadedChats.value.findIndex(
+      (c) => c.id === chat.id
+    );
+
+    if (existingChatIndex === -1) {
+      // Добавляем новый чат в начало списка
+      loadedChats.value.unshift(chat);
+      console.log(`✅ New chat added: ${chat.name} (${chat.id})`);
+    } else {
+      // Обновляем существующий чат
+      loadedChats.value[existingChatIndex] = chat;
+      console.log(`✅ Chat updated: ${chat.name} (${chat.id})`);
+    }
+  };
+
+  // Функция обновления последнего сообщения в чате
+  const updateChatLastMessage = (chatId: string, message: string) => {
+    const chat = loadedChats.value.find((c) => c.id === chatId);
+    if (chat) {
+      chat.lastMessage =
+        message.length > 50 ? message.substring(0, 50) + "..." : message;
+      console.log(`✅ Last message updated for chat ${chatId}: ${message}`);
+    }
+  };
+
   const connect = async (token: string, userId: string): Promise<boolean> => {
     currentUserId.value = userId;
 
@@ -146,7 +174,15 @@ export const useCentrifuge = () => {
               `📋 Loaded ${userChats.length} chats for user: ${currentUserId.value}`
             );
 
-            // Для каждого чата загружаем историю
+            // Подписываемся на обновления списка чатов
+            subscribe("chats:updates", (data) => {
+              console.log("🔄 Chat list update received:", data);
+              if (data.chat) {
+                addNewChat(data.chat);
+              }
+            });
+
+            // Для каждого чата загружаем историю и подписываемся на сообщения
             for (const chat of userChats) {
               const messages = await loadHistory(`chat:${chat.id}`);
               console.log(
@@ -161,12 +197,14 @@ export const useCentrifuge = () => {
 
                 if (data.message) {
                   messagesStore.addMessage(chat.id, data.message);
+                  updateChatLastMessage(chat.id, data.message.text);
                   console.log(
                     `✅ Real-time message added to chat ${chat.id}:`,
                     data.message
                   );
                 } else if (data.data && data.data.message) {
                   messagesStore.addMessage(chat.id, data.data.message);
+                  updateChatLastMessage(chat.id, data.data.message.text);
                   console.log(
                     `✅ Real-time message added to chat ${chat.id}:`,
                     data.data.message
@@ -276,5 +314,7 @@ export const useCentrifuge = () => {
     connectionError: readonly(connectionError),
     loadedChats,
     loadHistory,
+    addNewChat,
+    updateChatLastMessage,
   };
 };
