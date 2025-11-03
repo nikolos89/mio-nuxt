@@ -1,5 +1,5 @@
 // server/api/verify.post.ts
-import { getRedis } from "../utils/redis";
+import { getRedis } from "../../utils/redis";
 
 export default defineEventHandler(async (event) => {
   try {
