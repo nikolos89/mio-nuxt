@@ -21,6 +21,7 @@ export const useCentrifuge = () => {
   const connectionError = ref<string>("");
   const reconnectAttempts = ref(0);
   const loadedChats = ref<Chat[]>([]);
+  const activeSubscriptions = ref<Map<string, any>>(new Map());
 
   // Функция загрузки истории
   const loadHistory = async (channel: string) => {
@@ -97,6 +98,9 @@ export const useCentrifuge = () => {
       // Добавляем новый чат в начало списка
       loadedChats.value.unshift(chat);
       console.log(`✅ New chat added: ${chat.name} (${chat.id})`);
+
+      // Автоматически подписываемся на сообщения нового чата
+      subscribeToChatMessages(chat.id);
     } else {
       // Обновляем существующий чат
       loadedChats.value[existingChatIndex] = chat;
@@ -114,6 +118,101 @@ export const useCentrifuge = () => {
     }
   };
 
+  // НОВАЯ ФУНКЦИЯ: Подписка на сообщения чата
+  const subscribeToChatMessages = (chatId: string) => {
+    if (!centrifuge.value || !isConnected.value) {
+      console.log(
+        "⏳ Not connected yet, subscription will be established after connection"
+      );
+      return;
+    }
+
+    const channel = `chat:${chatId}`;
+
+    // Проверяем, не подписаны ли уже
+    if (activeSubscriptions.value.has(channel)) {
+      console.log(`ℹ️ Already subscribed to ${channel}`);
+      return;
+    }
+
+    try {
+      const sub = centrifuge.value.newSubscription(channel);
+
+      sub.on("publication", (ctx: any) => {
+        console.log("📨 New real-time message:", ctx.data);
+        const messagesStore = useMessagesStore();
+
+        if (ctx.data.message) {
+          messagesStore.addMessage(chatId, ctx.data.message);
+          updateChatLastMessage(chatId, ctx.data.message.text);
+          console.log(
+            `✅ Real-time message added to chat ${chatId}:`,
+            ctx.data.message
+          );
+        } else if (ctx.data.data && ctx.data.data.message) {
+          messagesStore.addMessage(chatId, ctx.data.data.message);
+          updateChatLastMessage(chatId, ctx.data.data.message.text);
+          console.log(
+            `✅ Real-time message added to chat ${chatId}:`,
+            ctx.data.data.message
+          );
+        }
+      });
+
+      sub.on("subscribed", (ctx: any) => {
+        console.log(`✅ Successfully subscribed to ${channel}`);
+      });
+
+      sub.on("error", (err: any) => {
+        console.error(`💥 Subscription error for ${channel}:`, err);
+      });
+
+      sub.subscribe();
+      activeSubscriptions.value.set(channel, sub);
+      console.log(`🎯 Subscribed to chat messages: ${channel}`);
+    } catch (error) {
+      console.error("Subscription error:", error);
+    }
+  };
+
+  // НОВАЯ ФУНКЦИЯ: Подписка на обновления списка чатов
+  const subscribeToChatsUpdates = () => {
+    if (!centrifuge.value || !isConnected.value) {
+      console.log(
+        "⏳ Not connected yet, chats subscription will be established after connection"
+      );
+      return;
+    }
+
+    const channel = "chats:updates";
+
+    try {
+      const sub = centrifuge.value.newSubscription(channel);
+
+      sub.on("publication", (ctx: any) => {
+        console.log("🔄 Chat list update received:", ctx.data);
+        if (ctx.data.chat) {
+          addNewChat(ctx.data.chat);
+        }
+      });
+
+      sub.on("subscribed", (ctx: any) => {
+        console.log(`✅ Successfully subscribed to ${channel}`);
+      });
+
+      sub.on("error", (err: any) => {
+        console.error(`💥 Subscription error for ${channel}:`, err);
+      });
+
+      sub.subscribe();
+      activeSubscriptions.value.set(channel, sub);
+      console.log(`🎯 Subscribed to chats updates: ${channel}`);
+    } catch (error) {
+      console.error("Chats subscription error:", error);
+    }
+  };
+
+  // ОБНОВЛЕННАЯ ФУНКЦИЯ: Подключение с улучшенной логикой подписок
   const connect = async (token: string, userId: string): Promise<boolean> => {
     currentUserId.value = userId;
 
@@ -166,7 +265,7 @@ export const useCentrifuge = () => {
           connectionError.value = "";
           reconnectAttempts.value = 0;
 
-          // Загружаем чаты и историю
+          // Загружаем чаты пользователя
           try {
             const userChats = await loadUserChats();
             loadedChats.value = userChats;
@@ -174,43 +273,20 @@ export const useCentrifuge = () => {
               `📋 Loaded ${userChats.length} chats for user: ${currentUserId.value}`
             );
 
-            // Подписываемся на обновления списка чатов
-            subscribe("chats:updates", (data) => {
-              console.log("🔄 Chat list update received:", data);
-              if (data.chat) {
-                addNewChat(data.chat);
-              }
-            });
+            // ПОДПИСЫВАЕМСЯ НА ОБНОВЛЕНИЯ СПИСКА ЧАТОВ
+            subscribeToChatsUpdates();
 
-            // Для каждого чата загружаем историю и подписываемся на сообщения
+            // ДЛЯ КАЖДОГО ЧАТА: загружаем историю и подписываемся на сообщения
             for (const chat of userChats) {
+              // Загружаем историю сообщений
               const messages = await loadHistory(`chat:${chat.id}`);
               console.log(
                 `📜 Loaded ${messages.length} messages for chat ${chat.id}`
               );
               addMessagesToChat(chat.id, messages);
 
-              // Подписываемся на новые сообщения
-              subscribe(`chat:${chat.id}`, (data) => {
-                console.log("📨 New real-time message:", data);
-                const messagesStore = useMessagesStore();
-
-                if (data.message) {
-                  messagesStore.addMessage(chat.id, data.message);
-                  updateChatLastMessage(chat.id, data.message.text);
-                  console.log(
-                    `✅ Real-time message added to chat ${chat.id}:`,
-                    data.message
-                  );
-                } else if (data.data && data.data.message) {
-                  messagesStore.addMessage(chat.id, data.data.message);
-                  updateChatLastMessage(chat.id, data.data.message.text);
-                  console.log(
-                    `✅ Real-time message added to chat ${chat.id}:`,
-                    data.data.message
-                  );
-                }
-              });
+              // ПОДПИСЫВАЕМСЯ НА СООБЩЕНИЯ ЧАТА
+              subscribeToChatMessages(chat.id);
             }
           } catch (error) {
             console.error("❌ Failed to load chats history:", error);
@@ -244,6 +320,17 @@ export const useCentrifuge = () => {
             `🔄 Reconnecting... (attempt ${reconnectAttempts.value})`
           );
           connectionError.value = `Переподключение... (попытка ${reconnectAttempts.value})`;
+        });
+
+        // ОБРАБОТЧИК ПОВТОРНОГО ПОДКЛЮЧЕНИЯ - ВОССТАНАВЛИВАЕМ ПОДПИСКИ
+        centrifuge.value.on("connected", (ctx) => {
+          console.log("🔄 Reconnected, restoring subscriptions...");
+          // Восстанавливаем подписки на все активные чаты
+          loadedChats.value.forEach((chat) => {
+            subscribeToChatMessages(chat.id);
+          });
+          // Восстанавливаем подписку на обновления чатов
+          subscribeToChatsUpdates();
         });
 
         centrifuge.value.connect();
@@ -296,6 +383,13 @@ export const useCentrifuge = () => {
 
   const disconnect = () => {
     if (centrifuge.value) {
+      // Отписываемся от всех подписок
+      activeSubscriptions.value.forEach((sub, channel) => {
+        sub.unsubscribe();
+        console.log(`🔴 Unsubscribed from ${channel}`);
+      });
+      activeSubscriptions.value.clear();
+
       centrifuge.value.disconnect();
       centrifuge.value = null;
       isConnected.value = false;
@@ -316,5 +410,6 @@ export const useCentrifuge = () => {
     loadHistory,
     addNewChat,
     updateChatLastMessage,
+    subscribeToChatMessages, // ЭКСПОРТИРУЕМ НОВУЮ ФУНКЦИЮ
   };
 };

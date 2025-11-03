@@ -22,20 +22,13 @@ interface Message {
 }
 
 // Composables
-const {
-  connect,
-  subscribe,
-  isConnected,
-  connectionError,
-  loadedChats,
-  addNewChat,
-} = useCentrifuge();
+const { connect, isConnected, connectionError, loadedChats, addNewChat } =
+  useCentrifuge();
 const auth = useAuth();
 const messagesStore = useMessagesStore();
 
 // State - используем ID пользователя из авторизации
 const currentUser = computed(() => auth.user?.id || "");
-const chats = ref<Chat[]>([]);
 const selectedChat = ref<Chat | null>(null);
 const newMessage = ref("");
 const messagesContainer = ref<HTMLElement>();
@@ -50,7 +43,7 @@ const currentMessages = computed(() => {
 });
 
 const displayChats = computed(() => {
-  return loadedChats.value.length > 0 ? loadedChats.value : chats.value;
+  return loadedChats.value;
 });
 
 // Methods
@@ -81,22 +74,7 @@ const initializeChat = async () => {
 
       if (connected) {
         console.log("🎉 Successfully connected to Centrifugo!");
-
-        // Подписываемся на все чаты для сообщений
-        chats.value.forEach((chat) => {
-          subscribe(`chat:${chat.id}`, (data) => {
-            if (data.message && data.message.chatId === chat.id) {
-              const messagesStore = useMessagesStore();
-              messagesStore.addMessage(chat.id, data.message);
-              updateChatLastMessage(chat.id, data.message.text);
-
-              // Если это активный чат - скроллим вниз
-              if (selectedChat.value?.id === chat.id) {
-                nextTick(() => scrollToBottom());
-              }
-            }
-          });
-        });
+        // ВСЕ ПОДПИСКИ ТЕПЕРЬ АВТОМАТИЧЕСКИ В useCentrifuge
       } else {
         console.error("❌ Failed to connect to Centrifugo");
       }
@@ -109,18 +87,11 @@ const initializeChat = async () => {
 };
 
 const updateChatLastMessage = (chatId: string, message: string) => {
-  // Обновляем в chats
-  const chat = chats.value.find((c) => c.id === chatId);
-  if (chat) {
-    chat.lastMessage =
-      message.length > 50 ? message.substring(0, 50) + "..." : message;
-  }
-
   // Обновляем в loadedChats через composable
   addNewChat({
     id: chatId,
-    name: chat?.name || `Чат ${chatId}`,
-    userCount: chat?.userCount || 1,
+    name: `Чат ${chatId}`, // Имя будет обновлено при получении данных
+    userCount: 1,
     lastMessage:
       message.length > 50 ? message.substring(0, 50) + "..." : message,
   });
@@ -191,9 +162,8 @@ const createNewChat = async () => {
     if (response.success) {
       console.log("✅ Chat created successfully:", newChat);
 
-      // Добавляем чат в оба массива
-      chats.value.unshift(newChat);
-      addNewChat(newChat);
+      // Чат автоматически добавится через Centrifugo подписку
+      // и будет отображен в реальном времени
 
       // Выбираем созданный чат
       selectChat(newChat);
@@ -204,7 +174,6 @@ const createNewChat = async () => {
     console.error("❌ Error creating chat:", error);
 
     // Fallback: добавляем локально если сервер недоступен
-    chats.value.unshift(newChat);
     addNewChat(newChat);
     selectChat(newChat);
   }

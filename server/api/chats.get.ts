@@ -43,23 +43,23 @@ export default defineEventHandler(async (event) => {
 // Функция для получения чатов по умолчанию
 function getDefaultChats() {
   return [
-    {
-      id: "1111",
-      name: "Общий чат",
-      userCount: 3,
-      lastMessage: "Добро пожаловать!",
-    },
-    {
-      id: "2222",
-      name: "Техподдержка",
-      userCount: 2,
-      lastMessage: "Чем можем помочь?",
-    },
-    {
-      id: "3333",
-      name: "Разработка",
-      userCount: 5,
-      lastMessage: "Обсуждаем новые фичи",
-    },
+    // {
+    //   id: "1111",
+    //   name: "Общий чат",
+    //   userCount: 3,
+    //   lastMessage: "Добро пожаловать!",
+    // },
+    // {
+    //   id: "2222",
+    //   name: "Техподдержка",
+    //   userCount: 2,
+    //   lastMessage: "Чем можем помочь?",
+    // },
+    // {
+    //   id: "3333",
+    //   name: "Разработка",
+    //   userCount: 5,
+    //   lastMessage: "Обсуждаем новые фичи",
+    // },
   ];
 }
