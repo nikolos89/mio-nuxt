@@ -1,5 +1,6 @@
 import { Centrifuge } from "centrifuge";
 import { ref, readonly, onUnmounted } from "vue";
+import { useMessagesStore } from "~/stores";
 
 interface CentrifugeContext {
   reason?: string;
@@ -65,15 +66,28 @@ export const useCentrifuge = () => {
     }
   };
 
-  // Функция добавления сообщений в чат
+  // Замени функцию addMessagesToChat
   const addMessagesToChat = (chatId: string, messages: any[]) => {
-    // Эмитим событие или обновляем хранилище
-    const event = new CustomEvent("chat-history-loaded", {
-      detail: { chatId, messages },
-    });
-    window.dispatchEvent(event);
+    const messagesStore = useMessagesStore();
 
-    console.log(`✅ Added ${messages.length} messages to chat ${chatId}`);
+    // Обрабатываем сообщения из history API
+    const processedMessages = messages
+      .map((msg) => {
+        // Если сообщение пришло из data.message (новый формат)
+        if (msg.data && msg.data.message) {
+          return msg.data.message;
+        }
+        // Если сообщение уже в правильном формате
+        return msg;
+      })
+      .filter((msg) => msg && msg.id); // Фильтруем валидные сообщения
+
+    console.log(
+      `✅ Adding ${processedMessages.length} processed messages to chat ${chatId}`,
+      processedMessages
+    );
+
+    messagesStore.addMessages(chatId, processedMessages);
   };
 
   const connect = async (token: string): Promise<boolean> => {
@@ -124,7 +138,11 @@ export const useCentrifuge = () => {
               // Подписываемся на новые сообщения
               subscribe(`chat:${chat.id}`, (data) => {
                 console.log("📨 New message:", data);
-                addMessagesToChat(chat.id, [data.message]);
+                const messagesStore = useMessagesStore();
+
+                if (data.message) {
+                  messagesStore.addMessage(chat.id, data.message);
+                }
               });
             }
           } catch (error) {

@@ -2,7 +2,12 @@ export default defineNuxtConfig({
   ssr: false,
   compatibilityDate: "2025-07-15",
   devtools: { enabled: true },
-  modules: ["@nuxtjs/tailwindcss", "nuxt-lucide-icons", "@nuxt/image"],
+  modules: [
+    "@nuxtjs/tailwindcss",
+    "nuxt-lucide-icons",
+    "@nuxt/image",
+    "@pinia/nuxt",
+  ],
   runtimeConfig: {
     // Настройки для будущей интеграции с PostgreSQL
   },

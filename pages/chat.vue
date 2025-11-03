@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { SendHorizontal, CheckCheck, Search, X } from "lucide-vue-next";
+// Если хранилище в stores/index.ts
+// import { useMessagesStore } from '~/stores';
 
 definePageMeta({
   middleware: "auth",
@@ -29,14 +31,16 @@ const { connect, subscribe, isConnected, connectionError, loadedChats } =
 const currentUser = ref("");
 const chats = ref<Chat[]>([]);
 const selectedChat = ref<Chat | null>(null);
-const chatMessages = ref<Record<string, Message[]>>({});
+// const chatMessages = ref<Record<string, Message[]>>({});
 const newMessage = ref("");
 const messagesContainer = ref<HTMLElement>();
 
-// Computed
+const messagesStore = useMessagesStore();
+
+// Замени computed currentMessages
 const currentMessages = computed(() => {
   if (!selectedChat.value) return [];
-  return chatMessages.value[selectedChat.value.id] || [];
+  return messagesStore.getMessages(selectedChat.value.id);
 });
 
 // Добавь computed для чатов
@@ -69,13 +73,12 @@ const initializeChat = async () => {
         console.log("🎉 Successfully connected to Centrifugo!");
 
         // Подписываемся на все чаты
+        // Подписываемся на все чаты
         chats.value.forEach((chat) => {
           subscribe(`chat:${chat.id}`, (data) => {
             if (data.message && data.message.chatId === chat.id) {
-              if (!chatMessages.value[chat.id]) {
-                chatMessages.value[chat.id] = [];
-              }
-              chatMessages.value[chat.id].push(data.message);
+              const messagesStore = useMessagesStore();
+              messagesStore.addMessage(chat.id, data.message);
               updateChatLastMessage(chat.id, data.message.text);
 
               // Если это активный чат - скроллим вниз
@@ -93,6 +96,22 @@ const initializeChat = async () => {
     }
   } catch (error) {
     console.error("💥 Failed to initialize chat:", error);
+  }
+};
+
+const updateChatLastMessage = (chatId: string, message: string) => {
+  // Обновляем в chats
+  const chat = chats.value.find((c) => c.id === chatId);
+  if (chat) {
+    chat.lastMessage =
+      message.length > 50 ? message.substring(0, 50) + "..." : message;
+  }
+
+  // Обновляем в loadedChats
+  const loadedChat = loadedChats.value.find((c) => c.id === chatId);
+  if (loadedChat) {
+    loadedChat.lastMessage =
+      message.length > 50 ? message.substring(0, 50) + "..." : message;
   }
 };
 
@@ -181,27 +200,21 @@ const sendMessage = async () => {
       },
     });
 
-    // Добавляем сообщение в массив конкретного чата
-    if (!chatMessages.value[selectedChat.value.id]) {
-      chatMessages.value[selectedChat.value.id] = [];
-    }
-    chatMessages.value[selectedChat.value.id].push(message);
-    updateChatLastMessage(selectedChat.value.id, newMessage.value);
+    // Сообщение автоматически добавится через Centrifugo подписку
     newMessage.value = "";
-
     nextTick(() => scrollToBottom());
   } catch (error) {
     console.error("Failed to send message:", error);
   }
 };
 
-const updateChatLastMessage = (chatId: string, message: string) => {
-  const chat = chats.value.find((c) => c.id === chatId);
-  if (chat) {
-    chat.lastMessage =
-      message.length > 50 ? message.substring(0, 50) + "..." : message;
-  }
-};
+// const updateChatLastMessage = (chatId: string, message: string) => {
+//   const chat = chats.value.find((c) => c.id === chatId);
+//   if (chat) {
+//     chat.lastMessage =
+//       message.length > 50 ? message.substring(0, 50) + "..." : message;
+//   }
+// };
 
 const scrollToBottom = () => {
   if (messagesContainer.value) {
@@ -217,8 +230,8 @@ const formatTime = (timestamp: number) => {
 };
 
 // Lifecycle
+// В mounted убери старую логику подписки - она теперь в useCentrifuge
 onMounted(() => {
-  // Получаем или создаем имя пользователя
   const savedUser = localStorage.getItem("chat-username");
   if (savedUser) {
     currentUser.value = savedUser;
@@ -228,10 +241,7 @@ onMounted(() => {
     localStorage.setItem("chat-username", newUser);
   }
 
-  // УБЕРИ эту строку - чаты будут загружаться из useCentrifuge
-  // chats.value = [];
-
-  initializeChat();
+  initializeChat(); // Это загрузит чаты и историю через useCentrifuge
 });
 
 // Auto-scroll when new messages arrive
