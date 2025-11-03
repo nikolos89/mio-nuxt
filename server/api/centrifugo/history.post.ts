@@ -49,9 +49,13 @@ export default defineEventHandler(async (event) => {
       };
     });
 
+    const validMessages = parsedMessages.filter(
+      (msg) => msg && msg.id && msg.timestamp && !isNaN(msg.timestamp)
+    );
+
     return {
-      messages: parsedMessages.reverse(),
-      count: parsedMessages.length,
+      messages: validMessages.reverse(),
+      count: validMessages.length,
     };
   } catch (err) {
     console.error("❌ Redis history load error:", err);

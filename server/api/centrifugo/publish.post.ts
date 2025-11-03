@@ -18,35 +18,52 @@ export default defineEventHandler(async (event) => {
       streamKey,
       "*",
       "data",
-      JSON.stringify(data) // Сохраняем как JSON строку
+      JSON.stringify(data)
     );
 
     console.log(`✅ Message saved to Redis: ${channel}, id: ${messageId}`);
 
-    // Также отправляем в Centrifugo для реального времени
-    const apiKey =
-      "GGMnEv_F6rZjnMQqCousEmqhlOJm0LuodrHnUxfpJRxzqI41u4t-Tjze8Qpk3XFRIwiRd9SB-R_0pcCji1agVA";
+    // Пробуем отправить в Centrifugo, но не блокируем из-за ошибок
+    try {
+      const apiKey =
+        "GGMnEv_F6rZjnMQqCousEmqhlOJm0LuodrHnUxfpJRxzqI41u4t-Tjze8Qpk3XFRIwiRd9SB-R_0pcCji1agVA";
 
-    const centrifugoResponse = await $fetch("http://localhost:8000/api", {
-      method: "POST",
-      headers: {
-        Authorization: `apikey ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        method: "publish",
-        params: {
-          channel: channel,
-          data: data,
+      // Используй тот же хост что и для WebSocket
+      const centrifugoResponse = await $fetch("http://localhost:8000/api", {
+        method: "POST",
+        headers: {
+          Authorization: `apikey ${apiKey}`,
+          "Content-Type": "application/json",
         },
-      }),
-    });
+        body: JSON.stringify({
+          method: "publish",
+          params: {
+            channel: channel,
+            data: data,
+          },
+        }),
+      });
 
-    return {
-      success: true,
-      redisId: messageId,
-      centrifugo: centrifugoResponse,
-    };
+      console.log("✅ Centrifugo publish success:", centrifugoResponse);
+
+      return {
+        success: true,
+        redisId: messageId,
+        centrifugo: centrifugoResponse,
+      };
+    } catch (centrifugoError) {
+      console.error(
+        "❌ Centrifugo publish failed, but message saved to Redis:",
+        centrifugoError
+      );
+
+      // Все равно возвращаем успех, т.к. сообщение сохранено в Redis
+      return {
+        success: true,
+        redisId: messageId,
+        centrifugo: { error: "Centrifugo unavailable, but message saved" },
+      };
+    }
   } catch (error: any) {
     console.error("❌ Publish error:", error);
     throw createError({
