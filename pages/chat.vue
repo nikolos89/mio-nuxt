@@ -99,7 +99,7 @@ const updateChatLastMessage = (chatId: string, message: string) => {
   // Обновляем в loadedChats через composable
   addNewChat({
     id: chatId,
-    name: `Чат ${chatId}`,
+    name: `${chatId}`, // Используем chatId как название
     userCount: 1,
     lastMessage:
       message.length > 50 ? message.substring(0, 50) + "..." : message,
@@ -193,7 +193,7 @@ const createChatWithUser = async (user: User) => {
   const chatId = `${currentUser.value}_${user.id}_${Date.now()}`;
   const newChat: Chat = {
     id: chatId,
-    name: `Чат с ${user.phone}`,
+    name: `${user.phone}`, // Используем user.phone как название
     userCount: 2,
     lastMessage: "Нет сообщений",
   };
