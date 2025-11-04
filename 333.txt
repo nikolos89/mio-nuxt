@@ -1,0 +1,2157 @@
+работает очень много, чаты общие на всех сейчас.
+
+
+привет.
+
+не трогай лишнего, то о чём я не просил.
+
+цель:
+сделать список чатов персональными, и индивидуальными для каждого пользователя системы.
+
+делаю на nuxt, в связке центрифуго, и редис на сервере.
+
+файлы:
+
+useAuth.ts
+interface User {
+  phone: string;
+  id: string;
+}
+
+export const useAuth = () => {
+  const user = ref<User | null>(null);
+  const isAuthenticated = computed(() => !!user.value);
+
+  // Инициализация при загрузке - ФИКСИРОВАННАЯ ВЕРСИЯ
+  const initAuth = () => {
+    if (process.client) {
+      const savedUser = localStorage.getItem("chat-user");
+      console.log("🔄 Auth init - localStorage chat-user:", savedUser);
+      if (savedUser) {
+        try {
+          user.value = JSON.parse(savedUser);
+          console.log("✅ Auth initialized with user:", user.value);
+        } catch (error) {
+          console.error("❌ Failed to parse saved user:", error);
+          localStorage.removeItem("chat-user");
+        }
+      } else {
+        console.log("ℹ️ No saved user found in localStorage");
+      }
+    }
+  };
+
+  // Принудительная проверка авторизации
+  const checkAuth = (): boolean => {
+    if (process.client) {
+      const savedUser = localStorage.getItem("chat-user");
+      if (savedUser && !user.value) {
+        try {
+          user.value = JSON.parse(savedUser);
+          console.log("✅ Auth checked and user restored:", user.value);
+          return true;
+        } catch (error) {
+          console.error("❌ Failed to parse user during check:", error);
+          return false;
+        }
+      }
+    }
+    return !!user.value;
+  };
+
+  // Вход - запрос кода
+  const login = async (
+    phone: string
+  ): Promise<{ success: boolean; message: string }> => {
+    try {
+      const data = await $fetch("/api/auth/login", {
+        method: "POST",
+        body: { phone },
+      });
+
+      return {
+        success: data.success,
+        message: data.message || "Код отправлен",
+      };
+    } catch (error: any) {
+      console.error("Login error:", error);
+      return {
+        success: false,
+        message: error.data?.message || "Ошибка сервера",
+      };
+    }
+  };
+
+  // Проверка кода
+  const verify = async (
+    phone: string,
+    code: string
+  ): Promise<{ success: boolean; user?: User; message: string }> => {
+    try {
+      const data = await $fetch("/api/auth/verify", {
+        method: "POST",
+        body: { phone, code },
+      });
+
+      if (data.success && data.user) {
+        user.value = data.user;
+        if (process.client) {
+          localStorage.setItem("chat-user", JSON.stringify(data.user));
+          localStorage.setItem("chat-user-id", data.user.id);
+        }
+        console.log("✅ User verified and saved:", data.user);
+        return {
+          success: true,
+          user: data.user,
+          message: "Успешный вход",
+        };
+      }
+
+      return {
+        success: false,
+        message: data.message || "Неверный код",
+      };
+    } catch (error: any) {
+      console.error("Verify error:", error);
+      return {
+        success: false,
+        message: error.data?.message || "Ошибка сервера",
+      };
+    }
+  };
+
+  // Выход
+  const logout = async (): Promise<void> => {
+    try {
+      await $fetch("/api/auth/logout", { method: "POST" });
+    } catch (error) {
+      console.error("Logout error:", error);
+    } finally {
+      user.value = null;
+      if (process.client) {
+        localStorage.removeItem("chat-user");
+        localStorage.removeItem("chat-user-id");
+      }
+      console.log("✅ User logged out");
+      await navigateTo("/login");
+    }
+  };
+
+  // Инициализируем сразу
+  initAuth();
+
+  return {
+    user: readonly(user),
+    isAuthenticated,
+    login,
+    verify,
+    logout,
+    initAuth,
+    checkAuth, // Добавляем новую функцию
+  };
+};
+
+
+useCentrifuge.ts
+import { Centrifuge } from "centrifuge";
+import { ref, readonly, onUnmounted } from "vue";
+import { useMessagesStore } from "~/stores";
+
+interface CentrifugeContext {
+  reason?: string;
+  [key: string]: any;
+}
+
+interface Chat {
+  id: string;
+  name: string;
+  userCount: number;
+  lastMessage?: string;
+}
+
+export const useCentrifuge = () => {
+  const currentUserId = ref("");
+  const centrifuge = ref<Centrifuge | null>(null);
+  const isConnected = ref(false);
+  const connectionError = ref<string>("");
+  const reconnectAttempts = ref(0);
+  const loadedChats = ref<Chat[]>([]);
+  const activeSubscriptions = ref<Map<string, any>>(new Map());
+  const isSubscribedToChats = ref(false);
+
+  // Функция загрузки истории
+  const loadHistory = async (channel: string) => {
+    console.log("🔄 Loading history for channel:", channel);
+    try {
+      const response = await $fetch("/api/centrifugo/history", {
+        method: "POST",
+        headers: {
+          Authorization:
+            "apikey GGMnEv_F6rZjnMQqCousEmqhlOJm0LuodrHnUxfpJRxzqI41u4t-Tjze8Qpk3XFRIwiRd9SB-R_0pcCji1agVA",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          method: "history",
+          params: { channel, limit: 100 },
+        }),
+      });
+      console.log("📦 History response:", response);
+      return response.messages || [];
+    } catch (error) {
+      console.error("History load error:", error);
+      return [];
+    }
+  };
+
+  // Функция загрузки чатов пользователя
+  const loadUserChats = async (): Promise<Chat[]> => {
+    try {
+      const response = await $fetch("/api/chats", {
+        method: "GET",
+      });
+
+      return (response.chats || []).map((chat) => ({
+        id: chat.id,
+        name: chat.name,
+        userCount: chat.userCount || 1,
+        lastMessage: chat.lastMessage || "Нет сообщений",
+      }));
+    } catch (error) {
+      console.error("❌ Failed to load user chats:", error);
+      return [];
+    }
+  };
+
+  // Функция добавления сообщений в чат
+  const addMessagesToChat = (chatId: string, messages: any[]) => {
+    const messagesStore = useMessagesStore();
+
+    const processedMessages = messages
+      .map((msg) => {
+        if (msg.data && msg.data.message) {
+          return msg.data.message;
+        }
+        return msg;
+      })
+      .filter((msg) => msg && msg.id);
+
+    console.log(
+      `✅ Adding ${processedMessages.length} processed messages to chat ${chatId}`,
+      processedMessages
+    );
+
+    messagesStore.addMessages(chatId, processedMessages);
+  };
+
+  // Функция добавления нового чата
+  const addNewChat = (chat: Chat) => {
+    // Проверяем, нет ли уже такого чата
+    const existingChatIndex = loadedChats.value.findIndex(
+      (c) => c.id === chat.id
+    );
+
+    if (existingChatIndex === -1) {
+      // Добавляем новый чат в начало списка
+      loadedChats.value.unshift(chat);
+      console.log(
+        `✅ New chat added to loadedChats: ${chat.name} (${chat.id})`
+      );
+
+      // Автоматически подписываемся на сообщения нового чата
+      subscribeToChatMessages(chat.id);
+    } else {
+      // Обновляем существующий чат
+      loadedChats.value[existingChatIndex] = chat;
+      console.log(`✅ Chat updated: ${chat.name} (${chat.id})`);
+    }
+  };
+
+  // Функция обновления последнего сообщения в чате
+  const updateChatLastMessage = (chatId: string, message: string) => {
+    const chat = loadedChats.value.find((c) => c.id === chatId);
+    if (chat) {
+      chat.lastMessage =
+        message.length > 50 ? message.substring(0, 50) + "..." : message;
+      console.log(`✅ Last message updated for chat ${chatId}: ${message}`);
+    }
+  };
+
+  // НОВАЯ ФУНКЦИЯ: Подписка на сообщения чата
+  const subscribeToChatMessages = (chatId: string) => {
+    if (!centrifuge.value || !isConnected.value) {
+      console.log(
+        "⏳ Not connected yet, subscription will be established after connection"
+      );
+      return;
+    }
+
+    const channel = `chat:${chatId}`;
+
+    // Проверяем, не подписаны ли уже
+    if (activeSubscriptions.value.has(channel)) {
+      console.log(`ℹ️ Already subscribed to ${channel}`);
+      return;
+    }
+
+    try {
+      const sub = centrifuge.value.newSubscription(channel);
+
+      sub.on("publication", (ctx: any) => {
+        console.log("📨 New real-time message:", ctx.data);
+        const messagesStore = useMessagesStore();
+
+        if (ctx.data.message) {
+          messagesStore.addMessage(chatId, ctx.data.message);
+          updateChatLastMessage(chatId, ctx.data.message.text);
+          console.log(
+            `✅ Real-time message added to chat ${chatId}:`,
+            ctx.data.message
+          );
+        } else if (ctx.data.data && ctx.data.data.message) {
+          messagesStore.addMessage(chatId, ctx.data.data.message);
+          updateChatLastMessage(chatId, ctx.data.data.message.text);
+          console.log(
+            `✅ Real-time message added to chat ${chatId}:`,
+            ctx.data.data.message
+          );
+        }
+      });
+
+      sub.on("subscribed", (ctx: any) => {
+        console.log(`✅ Successfully subscribed to ${channel}`);
+      });
+
+      sub.on("error", (err: any) => {
+        console.error(`💥 Subscription error for ${channel}:`, err);
+      });
+
+      sub.subscribe();
+      activeSubscriptions.value.set(channel, sub);
+      console.log(`🎯 Subscribed to chat messages: ${channel}`);
+    } catch (error) {
+      console.error("Subscription error:", error);
+    }
+  };
+
+  // НОВАЯ ФУНКЦИЯ: Подписка на обновления списка чатов
+  const subscribeToChatsUpdates = () => {
+    if (!centrifuge.value || !isConnected.value) {
+      console.log(
+        "⏳ Not connected yet, chats subscription will be established after connection"
+      );
+      return;
+    }
+
+    // Проверяем, не подписаны ли уже
+    if (isSubscribedToChats.value) {
+      console.log("ℹ️ Already subscribed to chats updates");
+      return;
+    }
+
+    const channel = "chats:updates";
+
+    try {
+      const sub = centrifuge.value.newSubscription(channel);
+
+      sub.on("publication", (ctx: any) => {
+        console.log("🔄 Chat list update received:", ctx.data);
+        if (ctx.data.chat) {
+          console.log("🎯 Adding chat from real-time update:", ctx.data.chat);
+          addNewChat(ctx.data.chat);
+        }
+      });
+
+      sub.on("subscribed", (ctx: any) => {
+        console.log(`✅ Successfully subscribed to ${channel}`);
+        isSubscribedToChats.value = true;
+      });
+
+      sub.on("error", (err: any) => {
+        console.error(`💥 Subscription error for ${channel}:`, err);
+        isSubscribedToChats.value = false;
+      });
+
+      sub.subscribe();
+      activeSubscriptions.value.set(channel, sub);
+      console.log(`🎯 Subscribed to chats updates: ${channel}`);
+    } catch (error) {
+      console.error("Chats subscription error:", error);
+    }
+  };
+
+  // ОБНОВЛЕННАЯ ФУНКЦИЯ: Подключение с улучшенной логикой подписок
+  const connect = async (token: string, userId: string): Promise<boolean> => {
+    currentUserId.value = userId;
+
+    return new Promise((resolve) => {
+      try {
+        connectionError.value = "";
+
+        const getWsUrl = (): string => {
+          return "wss://mio-messenger.com/connection/websocket";
+        };
+
+        const wsUrl = getWsUrl();
+        console.log(`🔗 Connecting to: ${wsUrl} for user: ${userId}`);
+
+        centrifuge.value = new Centrifuge(wsUrl, {
+          token: token,
+          debug: true,
+          minReconnectDelay: 1000,
+          maxReconnectDelay: 10000,
+          getToken: async function () {
+            console.log(
+              "🔄 Token refresh requested for user:",
+              currentUserId.value
+            );
+            try {
+              const { data: tokenData } = await $fetch("/api/token", {
+                method: "POST",
+                body: { userId: currentUserId.value },
+              });
+
+              if (tokenData?.token) {
+                console.log("✅ New token received");
+                return tokenData.token;
+              }
+            } catch (error) {
+              console.error("❌ Failed to refresh token:", error);
+            }
+            return token;
+          },
+        });
+
+        centrifuge.value.on("connecting", (ctx: CentrifugeContext) => {
+          console.log("🔄 Connecting to Centrifugo...");
+          connectionError.value = "Подключаемся...";
+        });
+
+        centrifuge.value.on("connected", async (ctx) => {
+          console.log("✅ Connected to Centrifugo!");
+          isConnected.value = true;
+          connectionError.value = "";
+          reconnectAttempts.value = 0;
+
+          // Загружаем чаты пользователя
+          try {
+            const userChats = await loadUserChats();
+            loadedChats.value = userChats;
+            console.log(
+              `📋 Loaded ${userChats.length} chats for user: ${currentUserId.value}`
+            );
+
+            // ПОДПИСЫВАЕМСЯ НА ОБНОВЛЕНИЯ СПИСКА ЧАТОВ
+            subscribeToChatsUpdates();
+
+            // ДЛЯ КАЖДОГО ЧАТА: загружаем историю и подписываемся на сообщения
+            for (const chat of userChats) {
+              // Загружаем историю сообщений
+              const messages = await loadHistory(`chat:${chat.id}`);
+              console.log(
+                `📜 Loaded ${messages.length} messages for chat ${chat.id}`
+              );
+              addMessagesToChat(chat.id, messages);
+
+              // ПОДПИСЫВАЕМСЯ НА СООБЩЕНИЯ ЧАТА
+              subscribeToChatMessages(chat.id);
+            }
+          } catch (error) {
+            console.error("❌ Failed to load chats history:", error);
+          }
+
+          resolve(true);
+        });
+
+        centrifuge.value.on("disconnected", (ctx: CentrifugeContext) => {
+          console.log("❌ Disconnected from Centrifugo:", ctx.reason);
+          isConnected.value = false;
+          connectionError.value = `Отключено: ${ctx.reason}`;
+          isSubscribedToChats.value = false;
+
+          // Автоматически переподключаемся через 2 секунды
+          setTimeout(() => {
+            if (centrifuge.value && !isConnected.value) {
+              console.log("🔄 Auto-reconnecting after disconnect...");
+              centrifuge.value.connect();
+            }
+          }, 2000);
+        });
+
+        centrifuge.value.on("error", (err: any) => {
+          console.error("💥 Centrifugo error:", err);
+          connectionError.value = `Ошибка: ${err.message}`;
+        });
+
+        centrifuge.value.on("reconnecting", (ctx: CentrifugeContext) => {
+          reconnectAttempts.value++;
+          console.log(
+            `🔄 Reconnecting... (attempt ${reconnectAttempts.value})`
+          );
+          connectionError.value = `Переподключение... (попытка ${reconnectAttempts.value})`;
+        });
+
+        centrifuge.value.connect();
+
+        // Увеличиваем таймаут подключения
+        setTimeout(() => {
+          if (!isConnected.value) {
+            console.log("⏰ Connection timeout");
+            connectionError.value = "Таймаут подключения";
+            resolve(false);
+          }
+        }, 15000);
+      } catch (error: any) {
+        console.error("Connection setup error:", error);
+        connectionError.value = `Setup error: ${error}`;
+        resolve(false);
+      }
+    });
+  };
+
+  const subscribe = (channel: string, callback: (data: any) => void) => {
+    if (!centrifuge.value || !isConnected.value) {
+      console.error("Cannot subscribe - not connected");
+      return null;
+    }
+
+    try {
+      const sub = centrifuge.value.newSubscription(channel);
+
+      sub.on("publication", (ctx: any) => {
+        console.log(`📨 Publication on ${channel}:`, ctx.data);
+        callback(ctx.data);
+      });
+
+      sub.on("subscribed", (ctx: any) => {
+        console.log(`✅ Successfully subscribed to ${channel}`);
+      });
+
+      sub.on("error", (err: any) => {
+        console.error(`💥 Subscription error for ${channel}:`, err);
+      });
+
+      sub.subscribe();
+      return sub;
+    } catch (error) {
+      console.error("Subscription error:", error);
+      return null;
+    }
+  };
+
+  const disconnect = () => {
+    if (centrifuge.value) {
+      // Отписываемся от всех подписок
+      activeSubscriptions.value.forEach((sub, channel) => {
+        sub.unsubscribe();
+        console.log(`🔴 Unsubscribed from ${channel}`);
+      });
+      activeSubscriptions.value.clear();
+      isSubscribedToChats.value = false;
+
+      centrifuge.value.disconnect();
+      centrifuge.value = null;
+      isConnected.value = false;
+    }
+  };
+
+  onUnmounted(() => {
+    disconnect();
+  });
+
+  return {
+    connect,
+    subscribe,
+    disconnect,
+    isConnected: readonly(isConnected),
+    connectionError: readonly(connectionError),
+    loadedChats,
+    loadHistory,
+    addNewChat,
+    updateChatLastMessage,
+    subscribeToChatMessages,
+  };
+};
+
+login.vue
+<script setup lang="ts">
+definePageMeta({
+  layout: false,
+  middleware: "auth",
+});
+
+const auth = useAuth();
+const router = useRouter();
+
+const step = ref<"phone" | "code">("phone");
+const phone = ref("");
+const code = ref("");
+const phoneError = ref("");
+const codeError = ref("");
+const message = ref("");
+const messageType = ref<"success" | "error">("success");
+const loading = ref(false);
+
+// Refs для инпутов
+const phoneInput = ref<HTMLInputElement>();
+const codeInput = ref<HTMLInputElement>();
+
+// Валидация телефона
+const validatePhone = (phone: string): boolean => {
+  const phoneRegex = /^\d{10,15}$/;
+  return phoneRegex.test(phone);
+};
+
+// Сброс формы
+const resetForm = () => {
+  step.value = "phone";
+  code.value = "";
+  message.value = "";
+  phoneError.value = "";
+  codeError.value = "";
+};
+
+// Запрос нового кода
+const requestNewCode = async () => {
+  if (!validatePhone(phone.value)) {
+    message.value = "Введите корректный номер телефона";
+    messageType.value = "error";
+    return;
+  }
+
+  loading.value = true;
+  message.value = "";
+
+  try {
+    const result = await auth.login(phone.value);
+
+    if (result.success) {
+      message.value = "Новый код отправлен";
+      messageType.value = "success";
+      code.value = ""; // Очищаем поле кода
+    } else {
+      message.value = result.message;
+      messageType.value = "error";
+    }
+  } catch (error: any) {
+    message.value = "Ошибка при запросе кода";
+    messageType.value = "error";
+    console.error("Request code error:", error);
+  } finally {
+    loading.value = false;
+  }
+};
+
+// Обработка отправки формы
+const handleSubmit = async () => {
+  phoneError.value = "";
+  codeError.value = "";
+  message.value = "";
+  loading.value = true;
+
+  try {
+    if (step.value === "phone") {
+      // Валидация телефона
+      if (!validatePhone(phone.value)) {
+        phoneError.value = "Введите корректный номер телефона (10-15 цифр)";
+        return;
+      }
+
+      // Запрос кода
+      const result = await auth.login(phone.value);
+
+      if (result.success) {
+        step.value = "code";
+        message.value = result.message;
+        messageType.value = "success";
+
+        // Фокусируемся на поле кода после перехода
+        nextTick(() => {
+          codeInput.value?.focus();
+        });
+      } else {
+        message.value = result.message;
+        messageType.value = "error";
+      }
+    } else {
+      // Проверка кода
+      if (!code.value || code.value.length !== 4) {
+        codeError.value = "Введите 4-значный код";
+        return;
+      }
+
+      const result = await auth.verify(phone.value, code.value);
+
+      if (result.success && result.user) {
+        message.value = result.message;
+        messageType.value = "success";
+
+        // Ждем немного чтобы показать сообщение об успехе
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+
+        // Редирект в чат
+        await navigateTo("/chat");
+      } else {
+        message.value = result.message;
+        messageType.value = "error";
+      }
+    }
+  } catch (error: any) {
+    message.value = "Произошла ошибка. Попробуйте еще раз.";
+    messageType.value = "error";
+    console.error("Auth error:", error);
+  } finally {
+    loading.value = false;
+  }
+};
+
+// Авто-фокус при изменении шага
+watch(step, (newStep) => {
+  nextTick(() => {
+    if (newStep === "phone") {
+      phoneInput.value?.focus();
+    } else if (newStep === "code") {
+      codeInput.value?.focus();
+    }
+  });
+});
+
+// Авто-фокус при загрузке страницы
+onMounted(() => {
+  if (auth.isAuthenticated.value) {
+    navigateTo("/chat");
+    return;
+  }
+
+  // Фокусируемся на поле телефона при загрузке
+  nextTick(() => {
+    phoneInput.value?.focus();
+  });
+});
+
+const formatPhone = (event: Event) => {
+  const target = event.target as HTMLInputElement;
+  phone.value = target.value.replace(/\D/g, "");
+};
+</script>
+
+<template>
+  <div
+    class="min-h-screen flex items-center justify-center p-4 relative overflow-hidden"
+  >
+    <!-- Анимированный градиентный фон -->
+    <div
+      class="absolute inset-0 bg-gradient-rotate animate-gradient-rotate"
+    ></div>
+
+    <!-- Контент -->
+    <div
+      class="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 relative z-10"
+    >
+      <!-- Заголовок -->
+      <div class="text-center mb-8">
+        <h1
+          class="text-3xl font-bold text-gray-900 mb-2 flex flex-row w-full justify-center"
+        >
+          <div class="text-[#C71585]">M</div>
+          <div class="text-[#FF1493]">i</div>
+          <div class="text-[#FF69B4]">o</div>
+        </h1>
+        <p class="text-gray-600">Message Input Output</p>
+      </div>
+
+      <!-- Форма входа -->
+      <form @submit.prevent="handleSubmit" class="space-y-6">
+        <!-- Ввод телефона -->
+        <div v-if="step === 'phone'">
+          <label
+            for="phone"
+            class="block text-sm font-medium text-gray-700 mb-2"
+          >
+            Номер телефона
+          </label>
+          <input
+            ref="phoneInput"
+            id="phone"
+            v-model="phone"
+            type="tel"
+            placeholder="79991234567"
+            @input="formatPhone"
+            class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none hover:shadow-md focus:shadow transition-shadow duration-300 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+            :class="{ 'border-red-500': phoneError }"
+            maxlength="15"
+            :disabled="loading"
+          />
+          <p v-if="phoneError" class="mt-2 text-sm text-red-600">
+            {{ phoneError }}
+          </p>
+          <p class="mt-2 text-xs text-gray-500">
+            Только цифры, без пробелов и спецсимволов.
+          </p>
+        </div>
+
+        <!-- Ввод кода -->
+        <div v-if="step === 'code'">
+          <label
+            for="code"
+            class="block text-sm font-medium text-gray-700 mb-2"
+          >
+            Код подтверждения
+          </label>
+          <input
+            ref="codeInput"
+            id="code"
+            v-model="code"
+            type="text"
+            placeholder="1234"
+            maxlength="4"
+            class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-1 hover:shadow-md focus:shadow focus:ring-blue-500 focus:outline-none focus:border-blue-500 transition-colors text-center text-2xl tracking-widest"
+            :class="{ 'border-red-500': codeError }"
+            :disabled="loading"
+          />
+          <p v-if="codeError" class="mt-2 text-sm text-red-600">
+            {{ codeError }}
+          </p>
+        </div>
+
+        <!-- Сообщения -->
+        <div
+          v-if="message"
+          class="p-3 rounded-lg text-sm flex justify-between items-center"
+          :class="
+            messageType === 'error'
+              ? 'bg-red-50 text-red-700'
+              : 'bg-green-50 text-green-700'
+          "
+        >
+          <div class="">
+            {{ message }}
+          </div>
+          <div
+            @click="requestNewCode"
+            class="text-white text-sx text-slate-300 py-1 px-2 bg-gray-300 rounded-md w-fit cursor-pointer hover:bg-gray-400 transition-colors"
+            :disabled="loading"
+          >
+            перезапросить
+          </div>
+        </div>
+
+        <!-- Кнопки -->
+        <div class="space-y-3">
+          <button
+            type="submit"
+            :disabled="loading"
+            class="w-full bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors font-medium"
+          >
+            <span v-if="loading" class="flex items-center justify-center gap-2">
+              <svg
+                class="animate-spin h-5 w-5 text-white"
+                fill="none"
+                viewBox="0 0 24 24"
+              >
+                <circle
+                  class="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  stroke-width="4"
+                ></circle>
+                <path
+                  class="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                ></path>
+              </svg>
+              {{ step === "phone" ? "Получить код" : "Войти" }}
+            </span>
+            <span v-else>
+              {{ step === "phone" ? "Получить код" : "Войти" }}
+            </span>
+          </button>
+
+          <button
+            v-if="step === 'code'"
+            type="button"
+            @click="resetForm"
+            class="w-full text-gray-600 py-2 px-4 rounded-lg hover:text-gray-800 transition-colors"
+            :disabled="loading"
+          >
+            ← Назад к вводу номера
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</template>
+
+<style>
+.bg-gradient-rotate {
+  background: linear-gradient(-45deg, #f0f9ff, #ebd4ff, #dddbff, #f0f9ff);
+  background-size: 400% 400%;
+}
+
+@keyframes gradient-rotate {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.animate-gradient-rotate {
+  animation: gradient-rotate 6s ease infinite;
+}
+</style>
+
+
+chat.vue
+<script setup lang="ts">
+import { SendHorizontal, CheckCheck, Search, X } from "lucide-vue-next";
+
+definePageMeta({
+  middleware: "auth",
+});
+
+// Types
+interface Chat {
+  id: string;
+  name: string;
+  lastMessage?: string;
+  userCount: number;
+}
+
+interface Message {
+  id: string;
+  text: string;
+  sender: string;
+  timestamp: number;
+  chatId: string;
+}
+
+interface User {
+  id: string;
+  phone: string;
+  name: string;
+}
+
+// Composables
+const { connect, isConnected, connectionError, loadedChats, addNewChat } =
+  useCentrifuge();
+const auth = useAuth();
+const messagesStore = useMessagesStore();
+
+// State
+const currentUser = computed(() => auth.user?.id || "");
+const selectedChat = ref<Chat | null>(null);
+const newMessage = ref("");
+const messagesContainer = ref<HTMLElement>();
+const searchUser = ref("");
+const isOpen = ref(false);
+const isAuthInitialized = ref(false);
+const searchResults = ref<User[]>([]);
+const showSearchResults = ref(false);
+const searchTimeout = ref<NodeJS.Timeout | null>(null);
+
+// Computed
+const currentMessages = computed(() => {
+  if (!selectedChat.value) return [];
+  return messagesStore.getMessages(selectedChat.value.id);
+});
+
+const displayChats = computed(() => {
+  return loadedChats.value;
+});
+
+// Methods
+const initializeChat = async () => {
+  try {
+    console.log("🔄 Initializing chat for user:", currentUser.value);
+
+    if (!currentUser.value) {
+      console.error("❌ No user ID available");
+      return;
+    }
+
+    const { data: tokenData, error } = await useFetch("/api/token", {
+      method: "POST",
+      body: { userId: currentUser.value },
+    });
+
+    console.log("Token response:", tokenData.value, error.value);
+
+    if (error.value) {
+      console.error("❌ Token error:", error.value);
+      return;
+    }
+
+    if (tokenData.value?.token) {
+      console.log("✅ Token received, connecting...");
+      const connected = await connect(tokenData.value.token, currentUser.value);
+
+      if (connected) {
+        console.log("🎉 Successfully connected to Centrifugo!");
+        console.log("📋 Current chats:", loadedChats.value);
+      } else {
+        console.error("❌ Failed to connect to Centrifugo");
+      }
+    } else {
+      console.error("❌ No token in response");
+    }
+  } catch (error) {
+    console.error("💥 Failed to initialize chat:", error);
+  }
+};
+
+const updateChatLastMessage = (chatId: string, message: string) => {
+  // Обновляем в loadedChats через composable
+  addNewChat({
+    id: chatId,
+    name: `Чат ${chatId}`,
+    userCount: 1,
+    lastMessage:
+      message.length > 50 ? message.substring(0, 50) + "..." : message,
+  });
+};
+
+const handleKeydown = (event: KeyboardEvent) => {
+  if (event.key === "Enter") {
+    if (event.shiftKey) {
+      // Shift+Enter - позволяем браузеру добавить новую строку
+    } else {
+      event.preventDefault();
+      sendMessage();
+      calculateRows();
+    }
+  }
+};
+
+const textareaRef = ref<HTMLTextAreaElement>();
+const textareaRows = ref(1);
+
+const calculateRows = () => {
+  if (!textareaRef.value) return 1;
+  const textarea = textareaRef.value;
+  const lineHeight = 20;
+  const padding = 24;
+  textarea.style.height = "auto";
+  const contentHeight = textarea.scrollHeight - padding;
+  const calculatedRows = Math.max(
+    1,
+    Math.min(6, Math.floor(contentHeight / lineHeight))
+  );
+  return calculatedRows;
+};
+
+watch(newMessage, () => {
+  nextTick(() => {
+    textareaRows.value = calculateRows();
+  });
+});
+
+// НОВЫЙ МЕТОД: Поиск пользователей
+const searchUsers = async () => {
+  if (!searchUser.value.trim()) {
+    searchResults.value = [];
+    showSearchResults.value = false;
+    return;
+  }
+
+  try {
+    console.log("🔍 Searching users for:", searchUser.value);
+
+    const { data, error } = await useFetch("/api/users", {
+      method: "GET",
+      query: { phone: searchUser.value },
+    });
+
+    if (error.value) {
+      console.error("❌ Search error:", error.value);
+      return;
+    }
+
+    if (data.value?.users) {
+      searchResults.value = data.value.users;
+      showSearchResults.value = true;
+      console.log(`✅ Found ${searchResults.value.length} users`);
+    }
+  } catch (error) {
+    console.error("❌ Failed to search users:", error);
+  }
+};
+
+// НОВЫЙ МЕТОД: Обработка ввода в поиске
+const handleSearchInput = () => {
+  // Очищаем предыдущий таймаут
+  if (searchTimeout.value) {
+    clearTimeout(searchTimeout.value);
+  }
+
+  // Устанавливаем новый таймаут на 2 секунды
+  searchTimeout.value = setTimeout(() => {
+    searchUsers();
+  }, 2000);
+};
+
+// НОВЫЙ МЕТОД: Создание чата с пользователем
+const createChatWithUser = async (user: User) => {
+  const chatId = `${currentUser.value}_${user.id}_${Date.now()}`;
+  const newChat: Chat = {
+    id: chatId,
+    name: `Чат с ${user.phone}`,
+    userCount: 2,
+    lastMessage: "Нет сообщений",
+  };
+
+  try {
+    console.log("🔄 Creating chat with user:", user);
+
+    // СНАЧАЛА ДОБАВЛЯЕМ ЧАТ ЛОКАЛЬНО - чтобы сразу отобразился
+    addNewChat(newChat);
+    console.log("✅ Chat added locally, now selecting:", newChat);
+
+    // Выбираем созданный чат сразу
+    selectChat(newChat);
+
+    // Скрываем результаты поиска и очищаем поле
+    showSearchResults.value = false;
+    searchUser.value = "";
+
+    // ПОТОМ отправляем на сервер
+    const response = await $fetch("/api/chats", {
+      method: "POST",
+      body: {
+        chat: newChat,
+      },
+    });
+
+    if (response.success) {
+      console.log("✅ Chat created successfully on server:", newChat);
+    } else {
+      console.error("❌ Failed to create chat on server:", response.error);
+    }
+  } catch (error) {
+    console.error("❌ Error creating chat on server:", error);
+    // Чат уже добавлен локально, так что пользователь не заметит ошибки
+  }
+};
+
+const createNewChat = async () => {
+  const newChatId = Date.now().toString();
+  const newChat: Chat = {
+    id: newChatId,
+    name: `Чат ${newChatId}`,
+    userCount: 1,
+    lastMessage: "Нет сообщений",
+  };
+
+  try {
+    console.log("🔄 Creating new chat:", newChat);
+
+    // СНАЧАЛА ДОБАВЛЯЕМ ЧАТ ЛОКАЛЬНО - чтобы сразу отобразился
+    addNewChat(newChat);
+    console.log("✅ Chat added locally, now selecting:", newChat);
+
+    // Выбираем созданный чат сразу
+    selectChat(newChat);
+
+    // ПОТОМ отправляем на сервер
+    const response = await $fetch("/api/chats", {
+      method: "POST",
+      body: {
+        chat: newChat,
+      },
+    });
+
+    if (response.success) {
+      console.log("✅ Chat created successfully on server:", newChat);
+    } else {
+      console.error("❌ Failed to create chat on server:", response.error);
+    }
+  } catch (error) {
+    console.error("❌ Error creating chat on server:", error);
+    // Чат уже добавлен локально, так что пользователь не заметит ошибки
+  }
+};
+
+const selectChat = (chat: Chat) => {
+  selectedChat.value = chat;
+  console.log("✅ Chat selected:", chat);
+  nextTick(() => scrollToBottom());
+};
+
+const sendMessage = async () => {
+  if (!newMessage.value.trim() || !selectedChat.value || !isConnected.value)
+    return;
+
+  const message: Message = {
+    id: Date.now().toString(),
+    text: newMessage.value,
+    sender: currentUser.value,
+    timestamp: Date.now(),
+    chatId: selectedChat.value.id,
+  };
+
+  try {
+    const messagesStore = useMessagesStore();
+    messagesStore.addMessage(selectedChat.value.id, message);
+    updateChatLastMessage(selectedChat.value.id, newMessage.value);
+    newMessage.value = "";
+    nextTick(() => scrollToBottom());
+
+    await $fetch("/api/centrifugo/publish", {
+      method: "POST",
+      body: {
+        channel: `chat:${selectedChat.value.id}`,
+        data: { message },
+      },
+    });
+
+    console.log("✅ Message sent to server");
+  } catch (error) {
+    console.error("Failed to send message:", error);
+  }
+};
+
+const scrollToBottom = () => {
+  if (messagesContainer.value) {
+    messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight;
+  }
+};
+
+const formatTime = (timestamp: number) => {
+  return new Date(timestamp).toLocaleTimeString("ru-RU", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
+
+// Закрытие результатов поиска при клике вне области
+const closeSearchResults = () => {
+  showSearchResults.value = false;
+};
+
+// Watch for loadedChats changes to debug
+watch(
+  loadedChats,
+  (newChats) => {
+    console.log("🔄 loadedChats updated:", newChats);
+  },
+  { deep: true }
+);
+
+onMounted(async () => {
+  console.log("🔄 Chat component mounted");
+
+  const isAuthed = auth.checkAuth();
+  console.log("🔍 Auth check result:", isAuthed);
+  console.log("🔍 Auth user:", auth.user);
+
+  if (isAuthed && auth.user?.id) {
+    console.log("✅ User authenticated, initializing chat...");
+    await initializeChat();
+    isAuthInitialized.value = true;
+  } else {
+    console.error("❌ User not authenticated even after check");
+    if (process.client) {
+      const savedUser = localStorage.getItem("chat-user");
+      console.log("🔍 Direct localStorage check:", savedUser);
+      if (savedUser) {
+        console.log("🔄 Trying to manually restore user from localStorage...");
+        try {
+          const userData = JSON.parse(savedUser);
+          // @ts-ignore
+          auth.user = userData;
+          console.log("✅ Manually restored user:", userData);
+          await initializeChat();
+          isAuthInitialized.value = true;
+        } catch (error) {
+          console.error("❌ Failed to manually restore user:", error);
+        }
+      }
+    }
+  }
+});
+
+watch(currentMessages, () => {
+  nextTick(() => scrollToBottom());
+});
+
+function clearsearchUser() {
+  searchUser.value = "";
+  searchResults.value = [];
+  showSearchResults.value = false;
+}
+
+const items = [
+  [
+    {
+      label: "Пункт 1",
+      icon: "i-heroicons-pencil-square",
+    },
+  ],
+];
+</script>
+
+<template>
+  <div class="min-h-screen bg-gray-100" @click="closeSearchResults">
+    <div class="bg-white shadow-sm border-b">
+      <div
+        class="max-w-6xl mx-auto px-4 py-3 flex justify-between items-center"
+      >
+        <div>
+          <h1 class="text-xl font-bold text-gray-800 text-md flex flex-row">
+            <div class="text-[#C71585]">M</div>
+            <div class="text-[#FF1493]">i</div>
+            <div class="text-[#FF69B4]">o</div>
+          </h1>
+          <p class="text-sm text-gray-600">
+            <span :class="isConnected ? 'text-green-600' : 'text-red-600'">
+              {{ isConnected ? "Онлайн" : "Офлайн" }}
+            </span>
+            <span v-if="connectionError" class="text-xs text-orange-600 ml-2">
+              ({{ connectionError }})
+            </span>
+          </p>
+        </div>
+        <div class="text-right flex items-center gap-4">
+          <p class="text-sm text-gray-600" v-if="auth.user">
+            {{ auth.user.phone }}
+          </p>
+          <p class="text-sm text-red-600" v-else>Не авторизован</p>
+          <button
+            @click="auth.logout()"
+            class="text-sm bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600 transition-colors"
+          >
+            Выйти
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="max-w-6xl mx-auto p-4">
+      <div class="bg-white rounded-lg shadow-lg overflow-hidden">
+        <div class="flex h-[calc(100vh-110px)]">
+          <!-- Sidebar - Список чатов -->
+          <div class="w-1/4 border-r bg-gray-50 flex flex-col">
+            <div class="pt-4 px-4 w-full relative">
+              <input
+                v-model="searchUser"
+                @input="handleSearchInput"
+                type="text"
+                maxlength="25"
+                placeholder="Найти пользователя..."
+                class="w-full pr-7 rounded-lg px-4 py-2 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-100 transition-colors"
+                :disabled="!isConnected"
+                @click.stop
+              />
+              <Search
+                class="absolute right-6 top-1/2 transform -translate-y-1 text-gray-400 hover:text-gray-600 cursor-pointer transition-colors"
+                v-if="!searchUser"
+              />
+              <X
+                class="absolute right-6 top-1/2 transform -translate-y-[2px] text-gray-400 hover:text-gray-600 cursor-pointer transition-colors"
+                :size="20"
+                @click="clearsearchUser()"
+                v-if="searchUser"
+              />
+
+              <!-- Результаты поиска -->
+              <div
+                v-if="showSearchResults && searchResults.length > 0"
+                class="absolute top-full left-0 right-0 bg-white border border-gray-200 rounded-lg shadow-lg mt-1 max-h-60 overflow-y-auto z-10"
+                @click.stop
+              >
+                <div
+                  v-for="user in searchResults"
+                  :key="user.id"
+                  @click="createChatWithUser(user)"
+                  class="px-4 py-3 hover:bg-blue-50 cursor-pointer transition-colors border-b border-gray-100 last:border-b-0"
+                >
+                  <div class="font-medium text-gray-800">{{ user.phone }}</div>
+                  <div class="text-sm text-gray-500">{{ user.name }}</div>
+                </div>
+              </div>
+
+              <!-- Сообщение "ничего не найдено" -->
+              <div
+                v-if="showSearchResults && searchResults.length === 0"
+                class="absolute top-full left-0 right-0 bg-white border border-gray-200 rounded-lg shadow-lg mt-1 z-10"
+                @click.stop
+              >
+                <div class="px-4 py-3 text-gray-500 text-center">
+                  Пользователи не найдены
+                </div>
+              </div>
+            </div>
+
+            <div class="p-4 border-b">
+              <button
+                @click="createNewChat"
+                class="w-full bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-600 transition-colors flex items-center justify-center gap-2"
+                :disabled="!auth.user"
+              >
+                Новый чат
+              </button>
+            </div>
+
+            <div class="flex-1 overflow-y-auto">
+              <div v-if="!auth.user" class="p-4 text-center text-gray-500">
+                Загрузка...
+              </div>
+              <div
+                v-else-if="displayChats.length === 0"
+                class="p-4 text-center text-gray-500"
+              >
+                Нет чатов. Создайте первый чат!
+              </div>
+              <div
+                v-else
+                v-for="chat in displayChats"
+                :key="chat.id"
+                @click="selectChat(chat)"
+                class="px-4 py-4 pr-2 border-b cursor-pointer transition-colors hover:bg-blue-50"
+                :class="{
+                  'bg-blue-100 border-blue-200': selectedChat?.id === chat.id,
+                }"
+              >
+                <div class="flex flex-row gap-3 justify-between">
+                  <div class="flex flex-row gap-3 flex-1 min-w-0">
+                    <div class="w-12 flex-shrink-0">
+                      <nuxt-img
+                        class="w-12 h-12 bg-green-200/50 rounded-full"
+                        src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSWAk-mfGdhPFylzhxWsEXqJa6DR5KaCd2ThA&s"
+                      />
+                    </div>
+                    <div class="flex-1 min-w-0">
+                      <div class="font-semibold text-gray-800 truncate">
+                        {{ chat.name }}
+                      </div>
+                      <div class="text-sm text-gray-500 truncate mt-1">
+                        {{ chat.lastMessage || "Нет сообщений" }}
+                      </div>
+                    </div>
+                  </div>
+                  <div
+                    class="w-14 h-full text-sm flex flex-col justify-center pt-1 gap-[3px] text-slate-500 text-right flex-shrink-0"
+                  >
+                    <div
+                      class="flex flex-row gap-1 justify-center items-center text-center"
+                    >
+                      <CheckCheck :size="15" color="#3b82f6" />
+                      <div class="">11:55</div>
+                    </div>
+                    <div class="">23</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Main Chat Area -->
+          <div class="flex-1 flex flex-col">
+            <template v-if="selectedChat && auth.user">
+              <!-- Messages -->
+              <div
+                ref="messagesContainer"
+                class="flex-1 overflow-y-auto p-4 space-y-1 bg-gray-50"
+              >
+                <div
+                  v-for="message in currentMessages"
+                  :key="message.id"
+                  class="flex"
+                  :class="{ 'justify-end': message.sender === currentUser }"
+                >
+                  <div
+                    class="max-w-xs lg:max-w-md px-3 py-[2px] rounded-2xl shadow-sm"
+                    :class="
+                      message.sender === currentUser
+                        ? 'bg-blue-500 text-white rounded-br-none'
+                        : 'bg-white text-gray-800 rounded-bl-none border'
+                    "
+                  >
+                    <div class="flex justify-between">
+                      <div class="text-sm">{{ message.text }}</div>
+                      <div
+                        class="text-xs mt-1.5 pb-[3px] text-right pl-2 flex flex-col justify-end"
+                        :class="
+                          message.sender === currentUser
+                            ? 'text-blue-200'
+                            : 'text-gray-400'
+                        "
+                      >
+                        {{ formatTime(message.timestamp) }}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div
+                  v-if="currentMessages.length === 0"
+                  class="text-center text-gray-500 flex flex-col h-full justify-center items-center"
+                >
+                  <div class="text-lg">Нет сообщений</div>
+                  <div class="text-sm">Начните общение первым!</div>
+                </div>
+              </div>
+
+              <!-- Message Input -->
+              <div class="px-4 py-2 border-t bg-white">
+                <form
+                  @submit.prevent="sendMessage"
+                  class="flex gap-2 items-center"
+                >
+                  <textarea
+                    v-model="newMessage"
+                    @keydown="handleKeydown"
+                    placeholder="Введите сообщение..."
+                    :rows="textareaRows"
+                    class="flex-1 rounded-lg content-center px-4 py-3 border-none outline-none resize-none min-h-[52px] max-h-32 overflow-y-auto"
+                    :disabled="!isConnected"
+                    ref="textareaRef"
+                  />
+                  <button
+                    type="submit"
+                    class="bg-blue-500 text-white px-4 py-3 rounded-lg hover:bg-blue-600 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors flex items-center gap-2 h-[52px]"
+                    :disabled="!newMessage.trim() || !isConnected"
+                  >
+                    <SendHorizontal :size="20" />
+                  </button>
+                </form>
+              </div>
+            </template>
+
+            <!-- No Chat Selected -->
+            <div
+              v-else
+              class="flex-1 flex items-center justify-center text-gray-500"
+            >
+              <div class="text-center">
+                <div class="text-2xl mb-2">👋</div>
+                <div class="text-lg font-semibold" v-if="auth.user">
+                  Выберите чат
+                </div>
+                <div class="text-lg font-semibold" v-else>Загрузка...</div>
+                <div class="text-sm">или создайте новый для начала общения</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+
+login.post.ts
+// server/api/login.post.ts
+import { getRedis } from "../../utils/redis";
+
+export default defineEventHandler(async (event) => {
+  try {
+    const body = await readBody(event);
+    const { phone } = body;
+
+    // Валидация номера телефона (только цифры, 10-15 символов)
+    const phoneRegex = /^\d{10,15}$/;
+    if (!phone || !phoneRegex.test(phone)) {
+      return {
+        success: false,
+        message:
+          "Введите корректный номер телефона (только цифры, 10-15 символов)",
+      };
+    }
+
+    // Генерируем 4-значный код
+    const code = Math.floor(1000 + Math.random() * 9000).toString();
+
+    // Временное хранилище кодов (всегда перезаписываем старый код)
+    const storage = useStorage("auth");
+    await storage.setItem(`code:${phone}`, {
+      code,
+      phone,
+      createdAt: Date.now(),
+      attempts: 0,
+    });
+
+    console.log(`🔐 Код для ${phone}: ${code}`); // В продакшене убрать!
+
+    // СОХРАНЯЕМ/ОБНОВЛЯЕМ ПОЛЬЗОВАТЕЛЯ В REDIS ДЛЯ ПОИСКА
+    const redis = getRedis();
+    const userId = `user-${phone}`; // Генерируем ID пользователя
+    const userKey = `user:${userId}`;
+
+    try {
+      await redis.hset(userKey, {
+        id: userId,
+        phone: phone,
+        name: phone, // Используем номер телефона как имя по умолчанию
+        createdAt: Date.now().toString(),
+      });
+      console.log(`✅ User saved to Redis: ${phone} (${userId})`);
+    } catch (redisError) {
+      console.error("❌ Failed to save user to Redis:", redisError);
+      // Продолжаем выполнение даже если Redis недоступен
+    }
+
+    return {
+      success: true,
+      message: `Код отправлен на ${phone}`,
+      // В реальном приложении здесь была бы отправка SMS
+    };
+  } catch (error: any) {
+    console.error("Login error:", error);
+    return {
+      success: false,
+      message: "Ошибка сервера",
+    };
+  }
+});
+
+verify.post.ts
+// server/api/verify.post.ts
+import { getRedis } from "../../utils/redis";
+
+export default defineEventHandler(async (event) => {
+  try {
+    const body = await readBody(event);
+    const { phone, code } = body;
+
+    // Валидация
+    if (!phone || !code) {
+      return {
+        success: false,
+        message: "Номер телефона и код обязательны",
+      };
+    }
+
+    const storage = useStorage("auth");
+    const codeData = await storage.getItem(`code:${phone}`);
+
+    if (!codeData) {
+      return {
+        success: false,
+        message: "Код не найден или устарел. Запросите новый код.",
+      };
+    }
+
+    // Проверяем попытки
+    if (codeData.attempts >= 3) {
+      await storage.removeItem(`code:${phone}`);
+      return {
+        success: false,
+        message: "Превышено количество попыток. Запросите новый код.",
+      };
+    }
+
+    // Проверяем срок действия кода (10 минут)
+    const codeAge = Date.now() - codeData.createdAt;
+    if (codeAge > 10 * 60 * 1000) {
+      await storage.removeItem(`code:${phone}`);
+      return {
+        success: false,
+        message: "Код устарел. Запросите новый.",
+      };
+    }
+
+    // Проверяем код
+    if (codeData.code !== code) {
+      // Увеличиваем счетчик попыток
+      await storage.setItem(`code:${phone}`, {
+        ...codeData,
+        attempts: codeData.attempts + 1,
+      });
+
+      const remainingAttempts = 3 - (codeData.attempts + 1);
+      return {
+        success: false,
+        message: `Неверный код. ${
+          remainingAttempts > 0
+            ? `Осталось попыток: ${remainingAttempts}`
+            : "Превышено количество попыток"
+        }`,
+      };
+    }
+
+    // Код верный - создаем пользователя
+    await storage.removeItem(`code:${phone}`);
+
+    const user = {
+      id: `user-${phone}`,
+      phone: phone,
+    };
+
+    // Сохраняем пользователя в основном хранилище
+    await storage.setItem(`user:${phone}`, user);
+
+    // СОХРАНЯЕМ ПОЛЬЗОВАТЕЛЯ В REDIS ДЛЯ ПОИСКА
+    const redis = getRedis();
+    const userKey = `user:${user.id}`;
+
+    try {
+      await redis.hset(userKey, {
+        id: user.id,
+        phone: user.phone,
+        name: user.phone, // Используем номер телефона как имя по умолчанию
+        createdAt: Date.now().toString(),
+      });
+      console.log(
+        `✅ User saved to Redis for search: ${user.phone} (${user.id})`
+      );
+    } catch (redisError) {
+      console.error("❌ Failed to save user to Redis:", redisError);
+      // Продолжаем выполнение даже если Redis недоступен
+    }
+
+    return {
+      success: true,
+      user,
+      message: "Успешная авторизация",
+    };
+  } catch (error: any) {
+    console.error("Verify error:", error);
+    return {
+      success: false,
+      message: "Ошибка сервера",
+    };
+  }
+});
+
+
+history.post.ts
+// server/api/centrifugo/history.post.ts
+import { getRedis } from "../../utils/redis";
+
+export default defineEventHandler(async (event) => {
+  const body = await readBody(event);
+  const { method, params } = body;
+
+  if (method !== "history") {
+    throw createError({ statusCode: 400, message: "Method must be 'history'" });
+  }
+
+  const { channel, limit = 50 } = params || {};
+
+  if (!channel) {
+    throw createError({ statusCode: 400, message: "Channel is required" });
+  }
+
+  const redis = getRedis();
+  const streamKey = `centrifugo.stream.${channel}`;
+
+  try {
+    const messages = await redis.xrevrange(streamKey, "+", "-", "COUNT", limit);
+
+    const parsedMessages = messages.map(([id, fields]) => {
+      // Ищем поле "data" в массиве [key1, value1, key2, value2, ...]
+      let dataField = null;
+      for (let i = 0; i < fields.length; i += 2) {
+        if (fields[i] === "data") {
+          dataField = fields[i + 1];
+          break;
+        }
+      }
+
+      let data = null;
+      if (dataField) {
+        try {
+          data = JSON.parse(dataField);
+        } catch (e) {
+          console.error("❌ Failed to parse message data:", dataField, e);
+          data = { error: "Invalid JSON", raw: dataField };
+        }
+      }
+
+      // Возвращаем сообщение в правильном формате
+      return {
+        id,
+        data: data || {}, // Все данные сообщения
+        ...(data?.message || {}), // Распаковываем message если есть
+      };
+    });
+
+    const validMessages = parsedMessages.filter(
+      (msg) => msg && msg.id && msg.timestamp && !isNaN(msg.timestamp)
+    );
+
+    return {
+      messages: validMessages.reverse(),
+      count: validMessages.length,
+    };
+  } catch (err) {
+    console.error("❌ Redis history load error:", err);
+    throw createError({
+      statusCode: 500,
+      message: "Failed to load messages from Redis",
+    });
+  }
+});
+
+publish.post.ts
+// server/api/centrifugo/publish.post.ts
+import { getRedis } from "../../utils/redis";
+
+export default defineEventHandler(async (event) => {
+  const body = await readBody(event);
+  const { channel, data } = body;
+
+  if (!channel) {
+    throw createError({ statusCode: 400, message: "Channel is required" });
+  }
+
+  const redis = getRedis();
+  const streamKey = `centrifugo.stream.${channel}`;
+
+  try {
+    // Сохраняем сообщение в Redis
+    const messageId = await redis.xadd(
+      streamKey,
+      "*",
+      "data",
+      JSON.stringify(data)
+    );
+
+    console.log(`✅ Message saved to Redis: ${channel}, id: ${messageId}`);
+
+    // Пробуем отправить в Centrifugo, но не блокируем из-за ошибок
+    try {
+      const apiKey =
+        "GGMnEv_F6rZjnMQqCousEmqhlOJm0LuodrHnUxfpJRxzqI41u4t-Tjze8Qpk3XFRIwiRd9SB-R_0pcCji1agVA";
+
+      // Используй тот же хост что и для WebSocket
+      const centrifugoResponse = await $fetch("http://localhost:8000/api", {
+        method: "POST",
+        headers: {
+          Authorization: `apikey ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          method: "publish",
+          params: {
+            channel: channel,
+            data: data,
+          },
+        }),
+      });
+
+      console.log("✅ Centrifugo publish success:", centrifugoResponse);
+
+      return {
+        success: true,
+        redisId: messageId,
+        centrifugo: centrifugoResponse,
+      };
+    } catch (centrifugoError) {
+      console.error(
+        "❌ Centrifugo publish failed, but message saved to Redis:",
+        centrifugoError
+      );
+
+      // Все равно возвращаем успех, т.к. сообщение сохранено в Redis
+      return {
+        success: true,
+        redisId: messageId,
+        centrifugo: { error: "Centrifugo unavailable, but message saved" },
+      };
+    }
+  } catch (error: any) {
+    console.error("❌ Publish error:", error);
+    throw createError({
+      statusCode: 500,
+      message: "Failed to publish message",
+    });
+  }
+});
+
+
+chats.get.ts
+// server/api/chats.get.ts
+import { getRedis } from "../utils/redis";
+
+export default defineEventHandler(async (event) => {
+  const redis = getRedis();
+
+  try {
+    // Получаем все чаты из Redis
+    const chatKeys = await redis.keys("chat:list:*");
+    const chats = [];
+
+    // Для каждого ключа чата получаем данные
+    for (const key of chatKeys) {
+      const chatData = await redis.hgetall(key);
+      if (chatData && chatData.id) {
+        chats.push({
+          id: chatData.id,
+          name: chatData.name || `Чат ${chatData.id}`,
+          userCount: parseInt(chatData.userCount) || 1,
+          lastMessage: chatData.lastMessage || "Нет сообщений",
+          createdAt: chatData.createdAt || Date.now().toString(),
+        });
+      }
+    }
+
+    // Сортируем по дате создания (новые сверху)
+    chats.sort((a, b) => parseInt(b.createdAt) - parseInt(a.createdAt));
+
+    console.log(`✅ Loaded ${chats.length} chats from Redis`);
+
+    return {
+      chats: chats.length > 0 ? chats : getDefaultChats(),
+    };
+  } catch (error) {
+    console.error("❌ Failed to load chats from Redis:", error);
+    // Возвращаем тестовые данные при ошибке
+    return {
+      chats: getDefaultChats(),
+    };
+  }
+});
+
+// Функция для получения чатов по умолчанию
+function getDefaultChats() {
+  return [
+    // {
+    //   id: "1111",
+    //   name: "Общий чат",
+    //   userCount: 3,
+    //   lastMessage: "Добро пожаловать!",
+    // },
+    // {
+    //   id: "2222",
+    //   name: "Техподдержка",
+    //   userCount: 2,
+    //   lastMessage: "Чем можем помочь?",
+    // },
+    // {
+    //   id: "3333",
+    //   name: "Разработка",
+    //   userCount: 5,
+    //   lastMessage: "Обсуждаем новые фичи",
+    // },
+  ];
+}
+
+chats.post.ts
+// server/api/chats.post.ts
+import { getRedis } from "../utils/redis";
+
+export default defineEventHandler(async (event) => {
+  const body = await readBody(event);
+  const { chat } = body;
+
+  if (!chat || !chat.id) {
+    throw createError({ statusCode: 400, message: "Chat data is required" });
+  }
+
+  const redis = getRedis();
+  const chatKey = `chat:list:${chat.id}`;
+
+  try {
+    // Сохраняем чат в Redis
+    await redis.hset(chatKey, {
+      id: chat.id,
+      name: chat.name,
+      userCount: chat.userCount || 1,
+      lastMessage: chat.lastMessage || "Нет сообщений",
+      createdAt: Date.now().toString(),
+    });
+
+    console.log(`✅ Chat saved to Redis: ${chat.name} (${chat.id})`);
+
+    // Публикуем обновление через Centrifugo
+    try {
+      const apiKey =
+        "GGMnEv_F6rZjnMQqCousEmqhlOJm0LuodrHnUxfpJRxzqI41u4t-Tjze8Qpk3XFRIwiRd9SB-R_0pcCji1agVA";
+
+      const centrifugoResponse = await $fetch("http://localhost:8000/api", {
+        method: "POST",
+        headers: {
+          Authorization: `apikey ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          method: "publish",
+          params: {
+            channel: "chats:updates",
+            data: {
+              chat: {
+                id: chat.id,
+                name: chat.name,
+                userCount: chat.userCount || 1,
+                lastMessage: chat.lastMessage || "Нет сообщений",
+              },
+              action: "created",
+              timestamp: Date.now(),
+            },
+          },
+        }),
+      });
+
+      console.log(
+        "✅ Chat update published to Centrifugo:",
+        centrifugoResponse
+      );
+    } catch (centrifugoError) {
+      console.error(
+        "❌ Centrifugo publish failed, but chat saved:",
+        centrifugoError
+      );
+    }
+
+    return {
+      success: true,
+      chat: chat,
+    };
+  } catch (error: any) {
+    console.error("❌ Chat creation error:", error);
+    throw createError({
+      statusCode: 500,
+      message: "Failed to create chat",
+    });
+  }
+});
+
+token.post.ts
+export default defineEventHandler(async (event) => {
+  try {
+    // Теперь получаем пользователя из авторизации
+    const authHeader = getHeader(event, "authorization");
+    // В реальном приложении здесь была бы проверка JWT токена
+    // Пока используем простой подход
+
+    const body = await readBody(event);
+    const { userId } = body;
+
+    if (!userId) {
+      return {
+        error: "User ID is required",
+        success: false,
+      };
+    }
+
+    const secret =
+      "9hfBoHP9HujBtnKoc-KMEDFnTCmPWfjZxCoHacagiI0HLcOww503Qz64tZrstfKD-foGBGeUdoQ8_lyt";
+
+    const { createHmac } = await import("node:crypto");
+
+    // 10 лет в секундах
+    const oneDayInSeconds = 1 * 1 * 24 * 60 * 60; // 1 день в секундах
+
+    const header = { alg: "HS256", typ: "JWT" };
+    const payload = {
+      sub: userId,
+      exp: Math.floor(Date.now() / 1000) + oneDayInSeconds,
+    };
+
+    const encodedHeader = Buffer.from(JSON.stringify(header)).toString(
+      "base64url"
+    );
+    const encodedPayload = Buffer.from(JSON.stringify(payload)).toString(
+      "base64url"
+    );
+
+    const signature = createHmac("sha256", secret)
+      .update(encodedHeader + "." + encodedPayload)
+      .digest("base64url");
+
+    const token = encodedHeader + "." + encodedPayload + "." + signature;
+
+    return {
+      token,
+      success: true,
+    };
+  } catch (error: any) {
+    console.error("Token generation error:", error);
+    return {
+      error: error.message,
+      success: false,
+    };
+  }
+});
+
+
+users.get.ts
+// server/api/users.get.ts
+import { getRedis } from "../utils/redis";
+
+export default defineEventHandler(async (event) => {
+  const query = getQuery(event);
+  const { phone } = query;
+
+  if (!phone) {
+    throw createError({
+      statusCode: 400,
+      message: "Phone parameter is required",
+    });
+  }
+
+  const redis = getRedis();
+
+  try {
+    // Ищем пользователей по части номера телефона
+    const userKeys = await redis.keys("user:*");
+    const foundUsers = [];
+
+    for (const key of userKeys) {
+      const userData = await redis.hgetall(key);
+      if (
+        userData &&
+        userData.phone &&
+        userData.phone.includes(phone as string)
+      ) {
+        foundUsers.push({
+          id: userData.id,
+          phone: userData.phone,
+          name: userData.name || userData.phone,
+        });
+      }
+    }
+
+    console.log(`🔍 Found ${foundUsers.length} users for phone: ${phone}`);
+
+    return {
+      users: foundUsers,
+    };
+  } catch (error) {
+    console.error("❌ Failed to search users:", error);
+    throw createError({
+      statusCode: 500,
+      message: "Failed to search users",
+    });
+  }
+});
+
+
+redis.ts
+import Redis from "ioredis";
+
+let redis;
+
+export const getRedis = () => {
+  if (!redis) {
+    redis = new Redis({
+      host: "127.0.0.1", // ← ИСПРАВЬ ЗДЕСЬ
+      port: 6379,
+      password: "",
+      db: 0,
+    });
+  }
+  return redis;
+};
+
+
+в каких документах и что нужно поменять ?
+цель: если я создаю 10 чатов на своём профиле, то этих чатов не должно создаваться на другом профиле. при этом, если я с одного профиля найду другого пользователя и напишу ему сообщение - этот чат у другого пользователя должен создасться.
+
+другого ни чего не затрагивай.
+
+скажи файлы которые будут задействованы для изменени.
+
+присылай целиком сначала все файлы с редактированием, а ниже отдельные части кода того, что отредактировал.
+
+начинай.
+
+

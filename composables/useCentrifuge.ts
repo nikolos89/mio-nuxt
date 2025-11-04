@@ -53,6 +53,9 @@ export const useCentrifuge = () => {
     try {
       const response = await $fetch("/api/chats", {
         method: "GET",
+        query: {
+          userId: currentUserId.value, // Добавляем ID пользователя
+        },
       });
 
       return (response.chats || []).map((chat) => ({
@@ -178,7 +181,7 @@ export const useCentrifuge = () => {
     }
   };
 
-  // НОВАЯ ФУНКЦИЯ: Подписка на обновления списка чатов
+  // ОБНОВЛЕННАЯ ФУНКЦИЯ: Подписка на обновления списка чатов
   const subscribeToChatsUpdates = () => {
     if (!centrifuge.value || !isConnected.value) {
       console.log(
@@ -193,7 +196,8 @@ export const useCentrifuge = () => {
       return;
     }
 
-    const channel = "chats:updates";
+    // Подписываемся на персонализированный канал чатов
+    const channel = `user:${currentUserId.value}:chats`;
 
     try {
       const sub = centrifuge.value.newSubscription(channel);
@@ -218,9 +222,9 @@ export const useCentrifuge = () => {
 
       sub.subscribe();
       activeSubscriptions.value.set(channel, sub);
-      console.log(`🎯 Subscribed to chats updates: ${channel}`);
+      console.log(`🎯 Subscribed to personal chats updates: ${channel}`);
     } catch (error) {
-      console.error("Chats subscription error:", error);
+      console.error("Personal chats subscription error:", error);
     }
   };
 

@@ -154,7 +154,10 @@ const searchUsers = async () => {
 
     const { data, error } = await useFetch("/api/users", {
       method: "GET",
-      query: { phone: searchUser.value },
+      query: {
+        phone: searchUser.value,
+        currentUserId: currentUser.value, // Добавляем ID текущего пользователя
+      },
     });
 
     if (error.value) {
@@ -209,11 +212,13 @@ const createChatWithUser = async (user: User) => {
     showSearchResults.value = false;
     searchUser.value = "";
 
-    // ПОТОМ отправляем на сервер
+    // ПОТОМ отправляем на сервер с указанием участников
     const response = await $fetch("/api/chats", {
       method: "POST",
       body: {
         chat: newChat,
+        currentUserId: currentUser.value, // Добавляем ID текущего пользователя
+        participants: [currentUser.value, user.id], // Указываем участников
       },
     });
 
@@ -224,23 +229,22 @@ const createChatWithUser = async (user: User) => {
     }
   } catch (error) {
     console.error("❌ Error creating chat on server:", error);
-    // Чат уже добавлен локально, так что пользователь не заметит ошибки
   }
 };
 
 const createNewChat = async () => {
-  const newChatId = Date.now().toString();
+  const newChatId = `personal_${currentUser.value}_${Date.now()}`;
   const newChat: Chat = {
     id: newChatId,
-    name: `Чат ${newChatId}`,
+    name: `Мой чат ${new Date().toLocaleTimeString()}`,
     userCount: 1,
     lastMessage: "Нет сообщений",
   };
 
   try {
-    console.log("🔄 Creating new chat:", newChat);
+    console.log("🔄 Creating new personal chat:", newChat);
 
-    // СНАЧАЛА ДОБАВЛЯЕМ ЧАТ ЛОКАЛЬНО - чтобы сразу отобразился
+    // СНАЧАЛА ДОБАВЛЯЕМ ЧАТ ЛОКАЛЬНО
     addNewChat(newChat);
     console.log("✅ Chat added locally, now selecting:", newChat);
 
@@ -252,17 +256,21 @@ const createNewChat = async () => {
       method: "POST",
       body: {
         chat: newChat,
+        currentUserId: currentUser.value, // Добавляем ID текущего пользователя
+        participants: [currentUser.value], // Только текущий пользователь
       },
     });
 
     if (response.success) {
-      console.log("✅ Chat created successfully on server:", newChat);
+      console.log("✅ Personal chat created successfully on server:", newChat);
     } else {
-      console.error("❌ Failed to create chat on server:", response.error);
+      console.error(
+        "❌ Failed to create personal chat on server:",
+        response.error
+      );
     }
   } catch (error) {
-    console.error("❌ Error creating chat on server:", error);
-    // Чат уже добавлен локально, так что пользователь не заметит ошибки
+    console.error("❌ Error creating personal chat on server:", error);
   }
 };
 

@@ -3,7 +3,7 @@ import { getRedis } from "../utils/redis";
 
 export default defineEventHandler(async (event) => {
   const query = getQuery(event);
-  const { phone } = query;
+  const { phone, currentUserId } = query;
 
   if (!phone) {
     throw createError({
@@ -12,10 +12,17 @@ export default defineEventHandler(async (event) => {
     });
   }
 
+  if (!currentUserId) {
+    throw createError({
+      statusCode: 400,
+      message: "Current user ID is required",
+    });
+  }
+
   const redis = getRedis();
 
   try {
-    // Ищем пользователей по части номера телефона
+    // Ищем пользователей по части номера телефона, исключая текущего пользователя
     const userKeys = await redis.keys("user:*");
     const foundUsers = [];
 
@@ -24,7 +31,8 @@ export default defineEventHandler(async (event) => {
       if (
         userData &&
         userData.phone &&
-        userData.phone.includes(phone as string)
+        userData.phone.includes(phone as string) &&
+        userData.id !== currentUserId // Исключаем текущего пользователя
       ) {
         foundUsers.push({
           id: userData.id,

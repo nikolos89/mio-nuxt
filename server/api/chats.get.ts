@@ -2,16 +2,31 @@
 import { getRedis } from "../utils/redis";
 
 export default defineEventHandler(async (event) => {
+  // Получаем ID текущего пользователя из запроса
+  const query = getQuery(event);
+  const currentUserId = query.userId as string;
+
+  if (!currentUserId) {
+    throw createError({
+      statusCode: 400,
+      message: "User ID is required",
+    });
+  }
+
   const redis = getRedis();
 
   try {
-    // Получаем все чаты из Redis
-    const chatKeys = await redis.keys("chat:list:*");
+    // Ищем чаты конкретного пользователя
+    const userChatsKey = `user:${currentUserId}:chats`;
+    const chatIds = await redis.smembers(userChatsKey);
+
     const chats = [];
 
-    // Для каждого ключа чата получаем данные
-    for (const key of chatKeys) {
-      const chatData = await redis.hgetall(key);
+    // Для каждого ID чата получаем данные
+    for (const chatId of chatIds) {
+      const chatKey = `chat:${chatId}`;
+      const chatData = await redis.hgetall(chatKey);
+
       if (chatData && chatData.id) {
         chats.push({
           id: chatData.id,
@@ -19,6 +34,9 @@ export default defineEventHandler(async (event) => {
           userCount: parseInt(chatData.userCount) || 1,
           lastMessage: chatData.lastMessage || "Нет сообщений",
           createdAt: chatData.createdAt || Date.now().toString(),
+          participants: chatData.participants
+            ? JSON.parse(chatData.participants)
+            : [],
         });
       }
     }
@@ -26,40 +44,15 @@ export default defineEventHandler(async (event) => {
     // Сортируем по дате создания (новые сверху)
     chats.sort((a, b) => parseInt(b.createdAt) - parseInt(a.createdAt));
 
-    console.log(`✅ Loaded ${chats.length} chats from Redis`);
+    console.log(`✅ Loaded ${chats.length} chats for user ${currentUserId}`);
 
     return {
-      chats: chats.length > 0 ? chats : getDefaultChats(),
+      chats: chats,
     };
   } catch (error) {
-    console.error("❌ Failed to load chats from Redis:", error);
-    // Возвращаем тестовые данные при ошибке
+    console.error("❌ Failed to load user chats from Redis:", error);
     return {
-      chats: getDefaultChats(),
+      chats: [],
     };
   }
 });
-
-// Функция для получения чатов по умолчанию
-function getDefaultChats() {
-  return [
-    // {
-    //   id: "1111",
-    //   name: "Общий чат",
-    //   userCount: 3,
-    //   lastMessage: "Добро пожаловать!",
-    // },
-    // {
-    //   id: "2222",
-    //   name: "Техподдержка",
-    //   userCount: 2,
-    //   lastMessage: "Чем можем помочь?",
-    // },
-    // {
-    //   id: "3333",
-    //   name: "Разработка",
-    //   userCount: 5,
-    //   lastMessage: "Обсуждаем новые фичи",
-    // },
-  ];
-}
