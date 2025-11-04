@@ -27,18 +27,25 @@ export default defineEventHandler(async (event) => {
     const foundUsers = [];
 
     for (const key of userKeys) {
-      const userData = await redis.hgetall(key);
-      if (
-        userData &&
-        userData.phone &&
-        userData.phone.includes(phone as string) &&
-        userData.id !== currentUserId // Исключаем текущего пользователя
-      ) {
-        foundUsers.push({
-          id: userData.id,
-          phone: userData.phone,
-          name: userData.name || userData.phone,
-        });
+      // Проверяем тип ключа перед использованием
+      const keyType = await redis.type(key);
+
+      if (keyType === "hash") {
+        const userData = await redis.hgetall(key);
+        if (
+          userData &&
+          userData.phone &&
+          userData.phone.includes(phone as string) &&
+          userData.id !== currentUserId // Исключаем текущего пользователя
+        ) {
+          foundUsers.push({
+            id: userData.id,
+            phone: userData.phone,
+            name: userData.name || userData.phone,
+          });
+        }
+      } else {
+        console.log(`ℹ️ Skipping key ${key} of type ${keyType}`);
       }
     }
 

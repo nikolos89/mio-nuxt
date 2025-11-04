@@ -18,7 +18,20 @@ export default defineEventHandler(async (event) => {
   try {
     // Ищем чаты конкретного пользователя
     const userChatsKey = `user:${currentUserId}:chats`;
-    const chatIds = await redis.smembers(userChatsKey);
+
+    // Проверяем тип ключа
+    const keyType = await redis.type(userChatsKey);
+
+    let chatIds: string[] = [];
+
+    if (keyType === "set") {
+      chatIds = await redis.smembers(userChatsKey);
+    } else if (keyType === "none") {
+      // Ключ не существует - это нормально для нового пользователя
+      console.log(`ℹ️ No chats found for user ${currentUserId}`);
+    } else {
+      console.error(`❌ Unexpected key type for ${userChatsKey}: ${keyType}`);
+    }
 
     const chats = [];
 

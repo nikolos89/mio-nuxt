@@ -32,7 +32,7 @@ export default defineEventHandler(async (event) => {
 
     console.log(`✅ Chat saved to Redis: ${chat.name} (${chat.id})`);
 
-    // Добавляем чат каждому участнику в их список чатов
+    // Добавляем чат каждому участнику в их список чатов (используем множество)
     for (const participantId of allParticipants) {
       const userChatsKey = `user:${participantId}:chats`;
       await redis.sadd(userChatsKey, chat.id);
