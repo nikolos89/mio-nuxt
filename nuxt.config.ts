@@ -7,6 +7,7 @@ export default defineNuxtConfig({
     "nuxt-lucide-icons",
     "@nuxt/image",
     "@pinia/nuxt",
+    "@nuxtjs/device",
   ],
   runtimeConfig: {
     // Настройки для будущей интеграции с PostgreSQL

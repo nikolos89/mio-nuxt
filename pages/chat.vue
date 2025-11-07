@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { SendHorizontal, CheckCheck, Search, X } from "lucide-vue-next";
+const { isMobile } = useDevice();
 
 definePageMeta({
   middleware: "auth",
@@ -415,6 +416,12 @@ const items = [
           </p>
         </div>
         <div class="text-right flex items-center gap-4">
+          <div>
+            <div v-if="$device.isDesktop">Desktop</div>
+            <div v-else-if="$device.isTablet">Tablet</div>
+            <div v-else>Mobile</div>
+          </div>
+
           <p class="text-sm text-gray-600" v-if="auth.user">
             {{ auth.user.phone }}
           </p>
