@@ -1,0 +1,27 @@
+<div class="header-content" v-if="$device.isMobile">
+      <div class="border-b mb-5 bg-slate-50">
+        <div class="flex items-center justify-between p-3">
+          <h1 class="text-lg font-bold flex items-center gap-2">
+            <Menu color="#C71585" />
+            <div class="relative flex">
+              <span class="text-[#C71585]">M</span>
+              <span class="text-[#FF1493] pt-1 overflow-hidden max-h-[21px]"
+                >l</span
+              >
+              <span class="text-[#FF69B4]">o</span>
+              <div
+                :class="isConnected === false ? 'bg-[#FF1493]' : 'bg-green-600'"
+                class="absolute top-[20%] left-[55.430%] w-1 h-1 rounded-full"
+              ></div>
+            </div>
+          </h1>
+          <!-- <button
+          v-if="showBackButton"
+          @click="handleBack"
+          class="p-2 text-gray-600"
+        >
+          ← Назад
+        </button> -->
+        </div>
+      </div>
+    </div>

@@ -24,10 +24,6 @@ export const useCentrifuge = () => {
   const activeSubscriptions = ref<Map<string, any>>(new Map());
   const isSubscribedToChats = ref(false);
 
-  watch(isConnected, (val) => {
-    console.log("🔁 Connection status changed:", val ? "Online" : "Offline");
-  });
-
   // Функция загрузки истории
   const loadHistory = async (channel: string) => {
     console.log("🔄 Loading history for channel:", channel);
@@ -415,9 +411,8 @@ export const useCentrifuge = () => {
     connect,
     subscribe,
     disconnect,
-    // 🔥 возвращаем isConnected напрямую, чтобы реактивность не терялась
-    isConnected,
-    connectionError,
+    isConnected: readonly(isConnected),
+    connectionError: readonly(connectionError),
     loadedChats,
     loadHistory,
     addNewChat,
