@@ -5,6 +5,9 @@ echo "🚀 Starting deployment..."
 echo "📥 Pulling latest changes from git..."
 git pull
 
+echo "🚀 NPM install..."
+npm i
+
 echo "🔨 Building application..."
 npm run build
 
