@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import Telegram from "../public/telegram.svg";
+import { RotateCcw } from "lucide-vue-next";
+
 definePageMeta({
   layout: false,
   middleware: "auth",
@@ -202,7 +205,7 @@ const formatTelegramChatId = (event: Event) => {
 // 👈 ПОЛУЧЕНИЕ TELEGRAM CHAT ID ИЗ БОТА
 const getTelegramChatIdInfo = () => {
   const infoMessage = `
-🤖 <b>Как получить Telegram Chat ID:</b>
+🤖 Как получить Telegram Chat ID:
 
 1. Откройте @mioCode_bot в Telegram
 2. Напишите любое сообщение боту
@@ -277,15 +280,23 @@ const getTelegramChatIdInfo = () => {
                 for="telegram"
                 class="block text-sm font-medium text-gray-700"
               >
-                Telegram Chat ID (опционально)
+                Telegram Chat ID
               </label>
-              <button
-                type="button"
-                @click="getTelegramChatIdInfo"
-                class="text-xs text-blue-600 hover:text-blue-800 underline"
-              >
-                Как получить?
-              </button>
+              <div class="flex flex-row gap-2 flex items-center justify-center">
+                <button
+                  type="button"
+                  @click="getTelegramChatIdInfo"
+                  class="text-xs text-blue-600 hover:text-blue-800 underline"
+                >
+                  Как получить?
+                </button>
+
+                <div class="w-5 h-4">
+                  <nuxt-link to="https://t.me/mioCode_bot" target="_blank"
+                    ><nuxt-img :src="Telegram"
+                  /></nuxt-link>
+                </div>
+              </div>
             </div>
             <input
               ref="telegramInput"
@@ -357,10 +368,10 @@ const getTelegramChatIdInfo = () => {
           </div>
           <div
             @click="requestNewCode"
-            class="text-white text-sx text-slate-300 py-1 px-2 bg-gray-300 rounded-md w-fit cursor-pointer hover:bg-gray-400 transition-colors"
+            class="text-white text-sx py-2 px-2 bg-blue-200 rounded-md w-fit cursor-pointer hover:bg-blue-300 transition-colors"
             :disabled="loading"
           >
-            перезапросить
+            <RotateCcw />
           </div>
         </div>
 

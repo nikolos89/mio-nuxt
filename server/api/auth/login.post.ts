@@ -71,9 +71,7 @@ export default defineEventHandler(async (event) => {
 
     return {
       success: true,
-      message: telegramChatId
-        ? `Код отправлен в Telegram и на ${phone}`
-        : `Код отправлен на ${phone}`,
+      message: telegramChatId ? `Код отправлен` : `Код отправлен`,
       telegramSent: !!telegramChatId,
     };
   } catch (error: any) {

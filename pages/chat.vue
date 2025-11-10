@@ -10,6 +10,8 @@ import {
   EllipsisVertical,
 } from "lucide-vue-next";
 
+const BGChat = "/bg-chat.jpg";
+
 definePageMeta({
   middleware: "auth",
 });
@@ -110,7 +112,7 @@ function MenuApp() {
 
 <template>
   <div
-    class="min-h-screen bg-gray-100"
+    class="h-screen bg-gray-100"
     @click="closeSearchResults"
     :class="isMobile ? 'flex flex-col gap-0' : ''"
   >
@@ -187,12 +189,14 @@ function MenuApp() {
       </div>
     </div>
 
+    <div class="w-full h-10"></div>
+
     <div
-      class="max-w-6xl mx-auto sm:p-4"
-      :class="isMobile ? 'flex-1 w-full' : 'p-2'"
+      class="max-w-6xl mx-auto sm:p-4 flex flex-1 h-[calc(100vh-2.5rem)]"
+      :class="isMobile ? 'flex-1 w-full' : 'p-0'"
     >
-      <div class="bg-white rounded-lg shadow-lg overflow-hidden">
-        <div class="flex h-full">
+      <div class="bg-white rounded-lg shadow-lg overflow-hidden flex flex-1">
+        <div class="flex flex-1">
           <!-- Sidebar - Список чатов -->
           <div
             class="border-r bg-gray-50 flex flex-col transition-all duration-300 ease-in-out"
@@ -292,7 +296,7 @@ function MenuApp() {
                 v-else-if="displayChats.length === 0"
                 class="p-4 text-center text-gray-500"
               >
-                Нет чатов. Создайте первый чат!
+                Нет чатов, создайте первый чат.
               </div>
               <div
                 v-else
@@ -435,7 +439,7 @@ function MenuApp() {
                 >
                   <div class="text-4xl mb-4">💬</div>
                   <div class="text-lg font-semibold mb-2">Нет сообщений</div>
-                  <div class="text-sm">Начните общение первым!</div>
+                  <div class="text-sm">Начните общение первым</div>
                 </div>
               </div>
 
@@ -474,10 +478,35 @@ function MenuApp() {
             </template>
 
             <!-- No Chat Selected -->
+
             <div
               v-else
-              class="flex-1 flex items-center justify-center text-gray-500 bg-gradient-to-br from-blue-50 to-purple-50"
+              class="flex-1 flex items-center justify-center text-gray-500 bg-[linear-gradient(85deg,var(--tw-gradient-stops))] from-green-300 to-purple-300"
+              :style="{
+                backgroundImage: `url(${BGChat})`,
+                backgroundSize: 'contain',
+                backgroundPosition: 'center',
+                backgroundRepeat: 'repeat',
+              }"
+              :class="!isMobile ? '' : ''"
             >
+              <!-- <div
+                class="flex-1 p-4 overflow-y-auto"
+                style="
+                  background-image: url('https://i.pinimg.com/736x/8c/98/99/8c98994518b575bfd8c949e91d20548b.jpg');
+                  background-size: contain;
+                "
+              >
+                123
+              </div> -->
+
+              <!-- <div :class="'bg-[url(' + BGChat + ')] w-5 h-5'"></div> -->
+
+              <!-- <div
+                
+                class="w-20 h-20 z-50"
+              ></div> -->
+
               <div class="text-center p-8">
                 <div class="text-6xl mb-4">👋</div>
                 <div class="text-xl font-semibold mb-2" v-if="auth.user">
