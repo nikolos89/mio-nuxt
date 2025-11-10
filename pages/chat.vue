@@ -109,11 +109,15 @@ function MenuApp() {
 </script>
 
 <template>
-  <div class="min-h-screen bg-gray-100" @click="closeSearchResults">
+  <div
+    class="min-h-screen bg-gray-100"
+    @click="closeSearchResults"
+    :class="isMobile ? 'flex flex-col gap-0' : ''"
+  >
     <!-- Header -->
-    <div class="bg-white shadow-sm border-b sticky top-0 z-20">
+    <div class="bg-white shadow-sm border-b sticky top-0 z-20 max-h-16">
       <div
-        class="max-w-6xl mx-auto px-4 py-3 flex justify-between items-center max-h-16"
+        class="max-w-6xl mx-auto px-4 py-3 flex justify-between items-center"
       >
         <div class="flex items-center gap-3">
           <!-- Mobile Menu Button -->
@@ -122,7 +126,7 @@ function MenuApp() {
             @click="handleBackToChats"
             class="lg:hidden p-2 rounded-lg hover:bg-gray-100 transition-colors"
           >
-            <ArrowLeft :size="20" />
+            <ArrowLeft :size="20" color="#C71585" />
           </button>
 
           <div class="" v-if="!selectedChat">
@@ -183,10 +187,11 @@ function MenuApp() {
       </div>
     </div>
 
-    <div class="max-w-6xl mx-auto p-2 sm:p-4">
-      <div
-        class="bg-white rounded-lg shadow-lg overflow-hidden h-[calc(100vh-110px)]"
-      >
+    <div
+      class="max-w-6xl mx-auto sm:p-4"
+      :class="isMobile ? 'flex-1 w-full' : 'p-2'"
+    >
+      <div class="bg-white rounded-lg shadow-lg overflow-hidden">
         <div class="flex h-full">
           <!-- Sidebar - Список чатов -->
           <div
