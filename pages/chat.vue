@@ -82,10 +82,14 @@ const checkMobile = () => {
 // Адаптивные методы выбора чата
 const handleSelectChat = (chat: any) => {
   selectChat(chat);
+
   if (isMobile.value) {
     showChatList.value = false;
     showChatArea.value = true;
   }
+  nextTick(() => {
+    scrollToBottom();
+  });
 };
 
 const handleBackToChats = () => {
@@ -108,6 +112,28 @@ const items = [
 function MenuApp() {
   alert("clicked");
 }
+
+const scrollToBottom = () => {
+  nextTick(() => {
+    if (messagesContainer.value) {
+      messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight;
+    }
+  });
+};
+
+// И вызывайте его когда нужно:
+watch(
+  currentMessages,
+  () => {
+    scrollToBottom();
+  },
+  { deep: true }
+);
+
+// При выборе чата
+// const selectChat = (chat: any) => {
+
+// };
 </script>
 
 <template>
@@ -405,16 +431,17 @@ function MenuApp() {
               </div>
 
               <!-- Messages Area -->
+              <!-- Messages Area -->
               <div
                 ref="messagesContainer"
-                class="flex-1 overflow-y-auto p-3 sm:p-4 space-y-2 bg-gray-50 bg-[linear-gradient(85deg,var(--tw-gradient-stops))] from-green-300 to-purple-300"
+                class="flex-1 overflow-y-auto p-3 sm:p-4 space-y-2 bg-gray-50"
                 :style="{
                   backgroundImage: `url(${BGChat})`,
                   backgroundSize: 'contain',
                   backgroundPosition: 'center',
                   backgroundRepeat: 'repeat',
+                  paddingBottom: isMobile ? '80px' : '0', // Добавляем отступ снизу на мобильных
                 }"
-                :class="isMobile ? '' : ''"
               >
                 <div
                   v-for="message in currentMessages"
@@ -449,6 +476,7 @@ function MenuApp() {
                 <div
                   v-if="currentMessages.length === 0"
                   class="flex-1 flex items-center justify-center text-gray-500 flex-col gap-2"
+                  :style="{ marginBottom: isMobile ? '80px' : '0' }"
                 >
                   <div class="text-4xl mb-4">💬</div>
                   <div class="text-lg font-semibold mb-2">Нет сообщений</div>
