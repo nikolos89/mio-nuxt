@@ -100,6 +100,10 @@ const items = [
     },
   ],
 ];
+
+function MenuApp() {
+  alert("clicked");
+}
 </script>
 
 <template>
@@ -107,7 +111,7 @@ const items = [
     <!-- Header -->
     <div class="bg-white shadow-sm border-b sticky top-0 z-20">
       <div
-        class="max-w-6xl mx-auto px-4 py-3 flex justify-between items-center"
+        class="max-w-6xl mx-auto px-4 py-3 flex justify-between items-center max-h-16"
       >
         <div class="flex items-center gap-3">
           <!-- Mobile Menu Button -->
@@ -119,8 +123,8 @@ const items = [
             <ArrowLeft :size="20" />
           </button>
 
-          <div class="">
-            <Menu color="#C71585" />
+          <div class="" v-if="!selectedChat">
+            <Menu color="#C71585" @click="MenuApp" />
           </div>
 
           <h1
@@ -157,7 +161,10 @@ const items = [
         </div>
 
         <div class="text-right flex items-center gap-4">
-          <p class="text-sm text-gray-600 sm:block" v-if="auth.user">
+          <p
+            class="text-sm text-gray-600 sm:block"
+            v-if="auth.user && !selectedChat"
+          >
             {{ auth.user.phone }}
           </p>
           <button
