@@ -6,6 +6,7 @@ import {
   X,
   Menu,
   ArrowLeft,
+  Pencil,
 } from "lucide-vue-next";
 
 definePageMeta({
@@ -118,7 +119,14 @@ const items = [
             <ArrowLeft :size="20" />
           </button>
 
-          <h1 class="text-xl font-bold text-gray-800 text-md flex flex-row">
+          <div class="">
+            <Menu color="#C71585" />
+          </div>
+
+          <h1
+            class="text-xl font-bold text-gray-800 text-md flex flex-row"
+            v-if="!selectedChat"
+          >
             <div class="text-[#C71585]">M</div>
             <div class="text-[#FF1493]">i</div>
             <div class="text-[#FF69B4]">o</div>
@@ -149,12 +157,12 @@ const items = [
         </div>
 
         <div class="text-right flex items-center gap-4">
-          <p class="text-sm text-gray-600 hidden sm:block" v-if="auth.user">
+          <p class="text-sm text-gray-600 sm:block" v-if="auth.user">
             {{ auth.user.phone }}
           </p>
           <button
             @click="auth.logout()"
-            class="text-sm bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600 transition-colors"
+            class="text-[12px] bg-transparent border border-[#C71585]/30 text-slate-500 px-2 py-1 rounded hover:bg-red-600 transition-colors"
           >
             Выйти
           </button>
@@ -172,73 +180,83 @@ const items = [
             class="border-r bg-gray-50 flex flex-col transition-all duration-300 ease-in-out"
             :class="{
               'w-1/4': !isMobile,
-              'absolute inset-0 z-10': isMobile && showChatList,
+              'absolute inset-0 z-10 mt-14 ': isMobile && showChatList,
               hidden: isMobile && !showChatList,
-              'w-full': isMobile,
+              'w-full ': isMobile,
             }"
           >
-            <!-- Search Section -->
-            <div class="pt-4 px-4 w-full relative">
-              <input
-                v-model="searchUser"
-                @input="handleSearchInput"
-                type="text"
-                maxlength="25"
-                placeholder="Найти пользователя..."
-                class="w-full pr-7 rounded-lg px-4 py-2 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-100 transition-colors"
-                :disabled="!isConnected"
-                @click.stop
-              />
-              <Search
-                class="absolute right-6 top-1/2 transform -translate-y-1 text-gray-400 hover:text-gray-600 cursor-pointer transition-colors"
-                v-if="!searchUser"
-              />
-              <X
-                class="absolute right-6 top-1/2 transform -translate-y-[2px] text-gray-400 hover:text-gray-600 cursor-pointer transition-colors"
-                :size="20"
-                @click="clearsearchUser()"
-                v-if="searchUser"
-              />
+            <div class="flex flex-row gap-3 sm:gap-2 border-b">
+              <!-- Search Section -->
+              <div class="w-full relative pt-1 pl-4 pb-2">
+                <input
+                  v-model="searchUser"
+                  @input="handleSearchInput"
+                  type="text"
+                  maxlength="25"
+                  placeholder="Найти пользователя..."
+                  class="w-full pr-7 rounded-lg px-4 py-2 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-100 transition-colors"
+                  :disabled="!isConnected"
+                  @click.stop
+                />
+                <Search
+                  class="absolute right-3 top-[30%] transform -translate-y-1 text-gray-400 hover:text-gray-600 cursor-pointer transition-colors"
+                  v-if="!searchUser"
+                />
+                <X
+                  class="absolute right-3 top-[30%] transform -translate-y-[2px] text-gray-400 hover:text-gray-600 cursor-pointer transition-colors"
+                  :size="20"
+                  @click="clearsearchUser()"
+                  v-if="searchUser"
+                />
 
-              <!-- Результаты поиска -->
-              <div
-                v-if="showSearchResults && searchResults.length > 0"
-                class="absolute top-full left-0 right-0 bg-white border border-gray-200 rounded-lg shadow-lg mt-1 max-h-60 overflow-y-auto z-10"
-                @click.stop
-              >
+                <!-- Результаты поиска -->
                 <div
-                  v-for="user in searchResults"
-                  :key="user.id"
-                  @click="createChatWithUser(user)"
-                  class="px-4 py-3 hover:bg-blue-50 cursor-pointer transition-colors border-b border-gray-100 last:border-b-0"
+                  v-if="showSearchResults && searchResults.length > 0"
+                  class="absolute top-full left-0 right-0 bg-white border border-gray-200 rounded-lg shadow-lg mt-1 max-h-60 overflow-y-auto z-10"
+                  @click.stop
                 >
-                  <div class="font-medium text-gray-800">{{ user.phone }}</div>
-                  <div class="text-sm text-gray-500">{{ user.name }}</div>
+                  <div
+                    v-for="user in searchResults"
+                    :key="user.id"
+                    @click="createChatWithUser(user)"
+                    class="px-4 py-3 hover:bg-blue-50 cursor-pointer transition-colors border-b border-gray-100 last:border-b-0"
+                  >
+                    <div class="font-medium text-gray-800">
+                      {{ user.phone }}
+                    </div>
+                    <div class="text-sm text-gray-500">{{ user.name }}</div>
+                  </div>
+                </div>
+
+                <!-- Сообщение "ничего не найдено" -->
+                <div
+                  v-if="showSearchResults && searchResults.length === 0"
+                  class="absolute top-full left-0 right-0 bg-white border border-gray-200 rounded-lg shadow-lg mt-1 z-10"
+                  @click.stop
+                >
+                  <div class="px-4 py-3 text-gray-500 text-center">
+                    Пользователи не найдены
+                  </div>
                 </div>
               </div>
 
-              <!-- Сообщение "ничего не найдено" -->
-              <div
-                v-if="showSearchResults && searchResults.length === 0"
-                class="absolute top-full left-0 right-0 bg-white border border-gray-200 rounded-lg shadow-lg mt-1 z-10"
-                @click.stop
-              >
-                <div class="px-4 py-3 text-gray-500 text-center">
-                  Пользователи не найдены
-                </div>
+              <!-- New Chat Button -->
+              <div class="py-1 pr-4">
+                <button
+                  @click="createNewChat"
+                  class="w-full bg-[#C71585]/30 text-white py-2 px-4 rounded-lg hover:bg-blue-600 transition-colors flex items-center justify-center gap-2"
+                  :disabled="!auth.user"
+                >
+                  <span class="hidden sm:inline">Новый чат</span>
+                  <!-- <span class="sm:hidden" :class="!isMobile ? 'hidden' : ''">+ Чат</span> -->
+                  <div class="" v-if="isMobile">
+                    <Pencil />
+                  </div>
+                  <div class="" v-if="!isMobile">
+                    <span class="sm:hidden">+ Чат</span>
+                  </div>
+                </button>
               </div>
-            </div>
-
-            <!-- New Chat Button -->
-            <div class="p-4 border-b">
-              <button
-                @click="createNewChat"
-                class="w-full bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-600 transition-colors flex items-center justify-center gap-2"
-                :disabled="!auth.user"
-              >
-                <span class="hidden sm:inline">Новый чат</span>
-                <span class="sm:hidden">+ Чат</span>
-              </button>
             </div>
 
             <!-- Chats List -->
