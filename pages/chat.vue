@@ -348,9 +348,9 @@ const handleKeydownImproved = (event: KeyboardEvent) => {
                   v-for="chat in displayChats"
                   :key="chat.id"
                   @click="handleSelectChat(chat)"
-                  class="px-3 sm:px-4 py-3 pr-2 border-b cursor-pointer transition-colors hover:bg-blue-50 active:bg-blue-100"
+                  class="px-3 sm:px-4 py-3 pr-2 cursor-pointer transition-colors hover:bg-blue-50 active:bg-blue-100"
                   :class="{
-                    'bg-blue-100 border-blue-200': selectedChat?.id === chat.id,
+                    'bg-gray-100': selectedChat?.id === chat.id,
                   }"
                 >
                   <div
@@ -391,10 +391,12 @@ const handleKeydownImproved = (event: KeyboardEvent) => {
                         />
                         <div class="text-xs">11:55</div>
                       </div>
-                      <div
-                        class="bg-blue-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs"
-                      >
-                        23
+                      <div class="w-full flex justify-end">
+                        <div
+                          class="bg-blue-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs"
+                        >
+                          21
+                        </div>
                       </div>
                     </div>
                   </div>
