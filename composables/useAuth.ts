@@ -44,19 +44,24 @@ export const useAuth = () => {
     return !!user.value;
   };
 
-  // Вход - запрос кода
+  // Вход - запрос кода (ОБНОВЛЕННАЯ ВЕРСИЯ С TELEGRAM)
   const login = async (
-    phone: string
-  ): Promise<{ success: boolean; message: string }> => {
+    phone: string,
+    telegramChatId?: string // 👈 ДОБАВЛЯЕМ ОПЦИОНАЛЬНЫЙ ПАРАМЕТР
+  ): Promise<{ success: boolean; message: string; telegramSent?: boolean }> => {
     try {
       const data = await $fetch("/api/auth/login", {
         method: "POST",
-        body: { phone },
+        body: {
+          phone,
+          telegramChatId: telegramChatId || null, // 👈 ПЕРЕДАЕМ В API
+        },
       });
 
       return {
         success: data.success,
         message: data.message || "Код отправлен",
+        telegramSent: data.telegramSent, // 👈 ВОЗВРАЩАЕМ ИНФОРМАЦИЮ О TELEGRAM
       };
     } catch (error: any) {
       console.error("Login error:", error);
@@ -67,7 +72,7 @@ export const useAuth = () => {
     }
   };
 
-  // Проверка кода
+  // Проверка кода (ОБНОВЛЕННАЯ ВЕРСИЯ)
   const verify = async (
     phone: string,
     code: string
@@ -88,7 +93,7 @@ export const useAuth = () => {
         return {
           success: true,
           user: data.user,
-          message: "Успешный вход",
+          message: data.message || "Успешный вход", // 👈 ИСПОЛЬЗУЕМ СООБЩЕНИЕ ИЗ API
         };
       }
 
@@ -132,6 +137,6 @@ export const useAuth = () => {
     verify,
     logout,
     initAuth,
-    checkAuth, // Добавляем новую функцию
+    checkAuth,
   };
 };

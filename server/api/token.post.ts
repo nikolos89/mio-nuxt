@@ -54,3 +54,8 @@ export default defineEventHandler(async (event) => {
     };
   }
 });
+
+//токен телеграмм бота
+//@mioCode_bot
+//8432097268:AAHuxIyTNqf6SyPiBPt0-LSAb8uuZOzgnHQ
+//токен телеграмм бота

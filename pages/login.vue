@@ -10,8 +10,10 @@ const router = useRouter();
 const step = ref<"phone" | "code">("phone");
 const phone = ref("");
 const code = ref("");
+const telegramChatId = ref(""); // 👈 ДОБАВЛЯЕМ ТЕЛЕГРАМ CHAT ID
 const phoneError = ref("");
 const codeError = ref("");
+const telegramError = ref(""); // 👈 ОШИБКА ДЛЯ TELEGRAM
 const message = ref("");
 const messageType = ref<"success" | "error">("success");
 const loading = ref(false);
@@ -19,11 +21,19 @@ const loading = ref(false);
 // Refs для инпутов
 const phoneInput = ref<HTMLInputElement>();
 const codeInput = ref<HTMLInputElement>();
+const telegramInput = ref<HTMLInputElement>(); // 👈 REF ДЛЯ TELEGRAM INPUT
 
 // Валидация телефона
 const validatePhone = (phone: string): boolean => {
   const phoneRegex = /^\d{10,15}$/;
   return phoneRegex.test(phone);
+};
+
+// Валидация Telegram Chat ID (опционально)
+const validateTelegramChatId = (chatId: string): boolean => {
+  if (!chatId) return true; // Пустое значение допустимо
+  const chatIdRegex = /^-?\d+$/; // Число, может быть отрицательным для групп
+  return chatIdRegex.test(chatId);
 };
 
 // Сброс формы
@@ -33,6 +43,7 @@ const resetForm = () => {
   message.value = "";
   phoneError.value = "";
   codeError.value = "";
+  telegramError.value = ""; // 👈 СБРАСЫВАЕМ TELEGRAM ОШИБКУ
 };
 
 // Запрос нового кода
@@ -43,14 +54,24 @@ const requestNewCode = async () => {
     return;
   }
 
+  // Валидация Telegram Chat ID
+  if (telegramChatId.value && !validateTelegramChatId(telegramChatId.value)) {
+    message.value = "Введите корректный Telegram Chat ID";
+    messageType.value = "error";
+    return;
+  }
+
   loading.value = true;
   message.value = "";
 
   try {
-    const result = await auth.login(phone.value);
+    // 👈 ПЕРЕДАЕМ TELEGRAM CHAT ID В МЕТОД ЛОГИНА
+    const result = await auth.login(phone.value, telegramChatId.value);
 
     if (result.success) {
-      message.value = "Новый код отправлен";
+      message.value = telegramChatId.value
+        ? "Новый код отправлен в Telegram"
+        : "Новый код отправлен";
       messageType.value = "success";
       code.value = ""; // Очищаем поле кода
     } else {
@@ -70,6 +91,7 @@ const requestNewCode = async () => {
 const handleSubmit = async () => {
   phoneError.value = "";
   codeError.value = "";
+  telegramError.value = ""; // 👈 СБРАСЫВАЕМ TELEGRAM ОШИБКУ
   message.value = "";
   loading.value = true;
 
@@ -81,12 +103,23 @@ const handleSubmit = async () => {
         return;
       }
 
-      // Запрос кода
-      const result = await auth.login(phone.value);
+      // Валидация Telegram Chat ID (если указан)
+      if (
+        telegramChatId.value &&
+        !validateTelegramChatId(telegramChatId.value)
+      ) {
+        telegramError.value = "Telegram Chat ID должен содержать только цифры";
+        return;
+      }
+
+      // 👈 ПЕРЕДАЕМ TELEGRAM CHAT ID В МЕТОД ЛОГИНА
+      const result = await auth.login(phone.value, telegramChatId.value);
 
       if (result.success) {
         step.value = "code";
-        message.value = result.message;
+        message.value = telegramChatId.value
+          ? result.message + " 📱"
+          : result.message;
         messageType.value = "success";
 
         // Фокусируемся на поле кода после перехода
@@ -107,7 +140,9 @@ const handleSubmit = async () => {
       const result = await auth.verify(phone.value, code.value);
 
       if (result.success && result.user) {
-        message.value = result.message;
+        message.value = telegramChatId.value
+          ? "✅ Вход выполнен! Код отправлен в Telegram"
+          : result.message;
         messageType.value = "success";
 
         // Ждем немного чтобы показать сообщение об успехе
@@ -156,6 +191,28 @@ onMounted(() => {
 const formatPhone = (event: Event) => {
   const target = event.target as HTMLInputElement;
   phone.value = target.value.replace(/\D/g, "");
+};
+
+// 👈 ФОРМАТИРОВАНИЕ TELEGRAM CHAT ID
+const formatTelegramChatId = (event: Event) => {
+  const target = event.target as HTMLInputElement;
+  telegramChatId.value = target.value.replace(/\D/g, "");
+};
+
+// 👈 ПОЛУЧЕНИЕ TELEGRAM CHAT ID ИЗ БОТА
+const getTelegramChatIdInfo = () => {
+  const infoMessage = `
+🤖 <b>Как получить Telegram Chat ID:</b>
+
+1. Откройте @mioCode_bot в Telegram
+2. Напишите любое сообщение боту
+3. Скопируйте ваш Chat ID из ответа бота
+4. Вставьте в поле ниже
+
+Или оставьте поле пустым для получения кода в консоли.
+  `.trim();
+
+  alert(infoMessage);
 };
 </script>
 
@@ -212,16 +269,63 @@ const formatPhone = (event: Event) => {
           <p class="mt-2 text-xs text-gray-500">
             Только цифры, без пробелов и спецсимволов.
           </p>
+
+          <!-- 👈 ПОЛЕ ДЛЯ TELEGRAM CHAT ID -->
+          <div class="mt-4">
+            <div class="flex items-center justify-between mb-2">
+              <label
+                for="telegram"
+                class="block text-sm font-medium text-gray-700"
+              >
+                Telegram Chat ID (опционально)
+              </label>
+              <button
+                type="button"
+                @click="getTelegramChatIdInfo"
+                class="text-xs text-blue-600 hover:text-blue-800 underline"
+              >
+                Как получить?
+              </button>
+            </div>
+            <input
+              ref="telegramInput"
+              id="telegram"
+              v-model="telegramChatId"
+              type="text"
+              placeholder="123456789"
+              @input="formatTelegramChatId"
+              class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none hover:shadow-md focus:shadow transition-shadow duration-300 focus:ring-1 focus:ring-green-500 focus:border-green-500 transition-colors"
+              :class="{ 'border-red-500': telegramError }"
+              :disabled="loading"
+            />
+            <p v-if="telegramError" class="mt-2 text-sm text-red-600">
+              {{ telegramError }}
+            </p>
+            <p class="mt-2 text-xs text-gray-500">
+              Укажите для получения кода в Telegram. Оставьте пустым для
+              получения кода в консоли.
+            </p>
+          </div>
         </div>
 
         <!-- Ввод кода -->
         <div v-if="step === 'code'">
-          <label
-            for="code"
-            class="block text-sm font-medium text-gray-700 mb-2"
-          >
-            Код подтверждения
-          </label>
+          <div class="flex items-center justify-between mb-2">
+            <label for="code" class="block text-sm font-medium text-gray-700">
+              Код подтверждения
+            </label>
+            <div
+              v-if="telegramChatId"
+              class="flex items-center gap-1 text-xs text-green-600"
+            >
+              <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                <path
+                  d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"
+                />
+              </svg>
+              Отправлен в Telegram
+            </div>
+          </div>
           <input
             ref="codeInput"
             id="code"

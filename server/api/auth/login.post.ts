@@ -1,12 +1,13 @@
 // server/api/login.post.ts
 import { getRedis } from "../../utils/redis";
+import { telegramService } from "../../utils/telegram";
 
 export default defineEventHandler(async (event) => {
   try {
     const body = await readBody(event);
-    const { phone } = body;
+    const { phone, telegramChatId } = body; // Добавляем telegramChatId
 
-    // Валидация номера телефона (только цифры, 10-15 символов)
+    // Валидация номера телефона
     const phoneRegex = /^\d{10,15}$/;
     if (!phone || !phoneRegex.test(phone)) {
       return {
@@ -19,39 +20,61 @@ export default defineEventHandler(async (event) => {
     // Генерируем 4-значный код
     const code = Math.floor(1000 + Math.random() * 9000).toString();
 
-    // Временное хранилище кодов (всегда перезаписываем старый код)
+    // Сохраняем код
     const storage = useStorage("auth");
     await storage.setItem(`code:${phone}`, {
       code,
       phone,
       createdAt: Date.now(),
       attempts: 0,
+      telegramChatId: telegramChatId || null, // Сохраняем chatId если есть
     });
 
-    console.log(`🔐 Код для ${phone}: ${code}`); // В продакшене убрать!
+    console.log(`🔐 Код для ${phone}: ${code}`);
 
-    // СОХРАНЯЕМ/ОБНОВЛЯЕМ ПОЛЬЗОВАТЕЛЯ В REDIS ДЛЯ ПОИСКА
+    // ОТПРАВЛЯЕМ КОД В TELEGRAM ЕСЛИ УКАЗАН chatId
+    if (telegramChatId) {
+      try {
+        const telegramSent = await telegramService.sendAuthCode(
+          telegramChatId,
+          phone,
+          code
+        );
+
+        if (telegramSent) {
+          console.log(`✅ Код отправлен в Telegram для ${phone}`);
+        } else {
+          console.log(`⚠️ Не удалось отправить код в Telegram для ${phone}`);
+        }
+      } catch (telegramError) {
+        console.error("❌ Ошибка отправки в Telegram:", telegramError);
+        // Продолжаем выполнение даже если Telegram недоступен
+      }
+    }
+
+    // Сохраняем пользователя в Redis
     const redis = getRedis();
-    const userId = `user-${phone}`; // Генерируем ID пользователя
-    const userKey = `user:${userId}`;
+    const userId = `user-${phone}`;
 
     try {
-      await redis.hset(userKey, {
+      await redis.hset(`user:${userId}`, {
         id: userId,
         phone: phone,
-        name: phone, // Используем номер телефона как имя по умолчанию
+        name: phone,
         createdAt: Date.now().toString(),
+        telegramChatId: telegramChatId || "",
       });
       console.log(`✅ User saved to Redis: ${phone} (${userId})`);
     } catch (redisError) {
       console.error("❌ Failed to save user to Redis:", redisError);
-      // Продолжаем выполнение даже если Redis недоступен
     }
 
     return {
       success: true,
-      message: `Код отправлен на ${phone}`,
-      // В реальном приложении здесь была бы отправка SMS
+      message: telegramChatId
+        ? `Код отправлен в Telegram и на ${phone}`
+        : `Код отправлен на ${phone}`,
+      telegramSent: !!telegramChatId,
     };
   } catch (error: any) {
     console.error("Login error:", error);

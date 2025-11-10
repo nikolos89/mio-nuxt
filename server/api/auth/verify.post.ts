@@ -1,5 +1,6 @@
 // server/api/verify.post.ts
 import { getRedis } from "../../utils/redis";
+import { telegramService } from "../../utils/telegram";
 
 export default defineEventHandler(async (event) => {
   try {
@@ -70,10 +71,10 @@ export default defineEventHandler(async (event) => {
       phone: phone,
     };
 
-    // Сохраняем пользователя в основном хранилище
+    // Сохраняем пользователя
     await storage.setItem(`user:${phone}`, user);
 
-    // СОХРАНЯЕМ ПОЛЬЗОВАТЕЛЯ В REDIS ДЛЯ ПОИСКА
+    // Сохраняем в Redis
     const redis = getRedis();
     const userKey = `user:${user.id}`;
 
@@ -81,15 +82,30 @@ export default defineEventHandler(async (event) => {
       await redis.hset(userKey, {
         id: user.id,
         phone: user.phone,
-        name: user.phone, // Используем номер телефона как имя по умолчанию
+        name: user.phone,
         createdAt: Date.now().toString(),
+        telegramChatId: codeData.telegramChatId || "",
       });
       console.log(
         `✅ User saved to Redis for search: ${user.phone} (${user.id})`
       );
     } catch (redisError) {
       console.error("❌ Failed to save user to Redis:", redisError);
-      // Продолжаем выполнение даже если Redis недоступен
+    }
+
+    // ОТПРАВЛЯЕМ УВЕДОМЛЕНИЕ В TELEGRAM О УСПЕШНОЙ АВТОРИЗАЦИИ
+    if (codeData.telegramChatId) {
+      try {
+        await telegramService.sendAuthSuccess(codeData.telegramChatId, phone);
+        console.log(
+          `✅ Уведомление об авторизации отправлено в Telegram для ${phone}`
+        );
+      } catch (telegramError) {
+        console.error(
+          "❌ Ошибка отправки уведомления в Telegram:",
+          telegramError
+        );
+      }
     }
 
     return {
