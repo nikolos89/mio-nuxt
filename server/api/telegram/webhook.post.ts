@@ -1,4 +1,6 @@
 // server/api/telegram/webhook.post.ts
+import { telegramService } from "~/utils/telegram";
+
 export default defineEventHandler(async (event) => {
   try {
     const body = await readBody(event);
@@ -22,7 +24,13 @@ export default defineEventHandler(async (event) => {
 🔒 Ваш Chat ID: <code>${chat.id}</code>
         `.trim();
 
-        // Здесь можно добавить отправку сообщения обратно
+        // 👈 ОТПРАВЛЯЕМ СООБЩЕНИЕ ОБРАТНО ПОЛЬЗОВАТЕЛЮ
+        await telegramService.sendMessage({
+          chat_id: chat.id,
+          text: welcomeMessage,
+          parse_mode: "HTML",
+        });
+
         console.log(`👤 Новый пользователь бота: ${chat.id}`);
       }
     }
@@ -33,3 +41,4 @@ export default defineEventHandler(async (event) => {
     return { success: false };
   }
 });
+// https://api.telegram.org/bot8432097268:AAHuxIyTNqf6SyPiBPt0-LSAb8uuZOzgnHQ/setWebhook?url=https://mio-messenger.com/api/telegram/webhook
