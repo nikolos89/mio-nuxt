@@ -350,7 +350,7 @@ function MenuApp() {
 
           <!-- Main Chat Area -->
           <div
-            class="flex-1 flex flex-col transition-all duration-300 ease-in-out"
+            class="flex-1 flex flex-col transition-all duration-300 ease-in-out w-full"
             :class="{
               hidden: isMobile && !showChatArea,
               flex: !isMobile || (isMobile && showChatArea),
