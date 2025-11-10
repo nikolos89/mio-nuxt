@@ -8,7 +8,19 @@ export default defineNuxtConfig({
     "@nuxt/image",
     "@pinia/nuxt",
     "@nuxtjs/device",
+    // Убираем @nuxtjs/pwa
   ],
+
+  app: {
+    head: {
+      title: "Mio Messenger",
+      meta: [
+        { name: "description", content: "Message input output" },
+        { name: "theme-color", content: "#C71585" },
+      ],
+    },
+  },
+
   runtimeConfig: {
     // Настройки для будущей интеграции с PostgreSQL
   },
@@ -17,7 +29,6 @@ export default defineNuxtConfig({
     devProxy: {
       host: "0.0.0.0",
     },
-    // Добавьте это для продакшена
     serveStatic: true,
   },
 

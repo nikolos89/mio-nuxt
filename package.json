@@ -19,6 +19,7 @@
   "dependencies": {
     "@nuxt/image": "^1.11.0",
     "@nuxtjs/device": "^3.2.4",
+    "@nuxtjs/pwa": "^3.3.5",
     "@nuxtjs/tailwindcss": "^6.14.0",
     "@pinia/nuxt": "^0.11.2",
     "axios": "^1.13.1",

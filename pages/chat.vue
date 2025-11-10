@@ -87,6 +87,7 @@ const handleSelectChat = (chat: any) => {
 
 const handleBackToChats = () => {
   if (isMobile.value) {
+    selectedChat.value = null;
     showChatList.value = true;
     showChatArea.value = false;
   }
