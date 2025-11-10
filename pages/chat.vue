@@ -89,6 +89,10 @@ const handleSelectChat = (chat: any) => {
   }
   nextTick(() => {
     scrollToBottom();
+    // Фокус на текстовое поле после выбора чата
+    if (textareaRef.value) {
+      textareaRef.value.focus();
+    }
   });
 };
 
@@ -130,21 +134,37 @@ watch(
   { deep: true }
 );
 
-// При выборе чата
-// const selectChat = (chat: any) => {
+// Реактивное отслеживание ввода для мгновенной активации кнопки
+const trimmedMessage = computed(() => newMessage.value.trim());
 
-// };
+// Улучшенная функция отправки сообщения
+const handleSendMessage = async () => {
+  if (!trimmedMessage.value || !isConnected.value) return;
+
+  await sendMessage();
+
+  // Фокус обратно на текстовое поле после отправки
+  nextTick(() => {
+    if (textareaRef.value) {
+      textareaRef.value.focus();
+    }
+  });
+};
+
+// Улучшенная обработка клавиш
+const handleKeydownImproved = (event: KeyboardEvent) => {
+  if (event.key === "Enter" && !event.shiftKey) {
+    event.preventDefault();
+    handleSendMessage();
+  }
+};
 </script>
 
 <template>
-  <div
-    class="h-screen bg-gray-100"
-    @click="closeSearchResults"
-    :class="isMobile ? 'flex flex-col gap-0' : ''"
-  >
-    <!-- Header -->
+  <div class="h-screen bg-gray-100 flex flex-col" @click="closeSearchResults">
+    <!-- Header - FIXED: используем sticky вместо fixed -->
     <div
-      class="bg-white shadow-sm border-b h-13 fixed top-0 left-0 right-0 z-50"
+      class="bg-white shadow-sm border-b h-13 sticky top-0 left-0 right-0 z-50"
     >
       <div
         class="max-w-6xl mx-auto px-4 py-3 flex justify-between items-center"
@@ -158,10 +178,6 @@ watch(
           >
             <ArrowLeft :size="20" color="#C71585" />
           </button>
-
-          <!-- <div class="" v-if="selectedChat">
-            <Menu color="#C71585" @click="MenuApp" />
-          </div> -->
 
           <h1
             class="text-xl font-bold text-gray-800 text-md flex flex-row"
@@ -217,353 +233,333 @@ watch(
       </div>
     </div>
 
-    <div class="w-full h-10"></div>
-
-    <div
-      class="max-w-6xl mx-auto sm:p-4 flex flex-1 h-[calc(100vh-2.5rem)]"
-      :class="isMobile ? 'flex-1 w-full pb-3' : 'p-0 '"
-    >
-      <div class="bg-white rounded-lg shadow-lg overflow-hidden flex flex-1">
-        <div class="flex flex-1 w-full">
-          <!-- Sidebar - Список чатов -->
-          <div
-            class="border-r bg-gray-50 flex flex-col transition-all duration-300 ease-in-out"
-            :class="{
-              'w-[28%]': !isMobile,
-              'absolute inset-0 z-10 mt-14 ': isMobile && showChatList,
-              hidden: isMobile && !showChatList,
-              'w-full ': isMobile,
-            }"
-          >
+    <!-- Основной контент - FIXED: убираем фиксированные высоты и используем flex -->
+    <div class="flex-1 flex flex-col min-h-0">
+      <div
+        class="max-w-6xl mx-auto sm:p-4 flex flex-1 w-full min-h-0"
+        :class="isMobile ? 'pb-0' : ''"
+      >
+        <div
+          class="bg-white rounded-lg shadow-lg overflow-hidden flex flex-1 w-full"
+        >
+          <div class="flex flex-1 w-full min-h-0">
+            <!-- Sidebar - Список чатов -->
             <div
-              class="flex flex-row sm:gap-2 border-b"
-              :class="!isMobile ? 'pt-1 gap-2' : 'gap-3'"
+              class="border-r bg-gray-50 flex flex-col transition-all duration-300 ease-in-out min-h-0"
+              :class="{
+                'w-[28%]': !isMobile,
+                'absolute inset-0 z-10 mt-13': isMobile && showChatList,
+                hidden: isMobile && !showChatList,
+                'w-full': isMobile,
+              }"
             >
-              <!-- Search Section -->
-              <div class="w-full relative pt-1 pl-4 pb-2">
-                <input
-                  v-model="searchUser"
-                  @input="handleSearchInput"
-                  type="text"
-                  maxlength="25"
-                  placeholder="Найти пользователя..."
-                  class="w-full pr-7 rounded-lg px-4 py-2 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-100 transition-colors"
-                  :disabled="!isConnected"
-                  @click.stop
-                />
-                <Search
-                  class="absolute top-[30%] transform -translate-y-1 text-gray-400 hover:text-gray-600 cursor-pointer transition-colors"
-                  :class="!isMobile ? 'right-2' : 'right-3'"
-                  v-if="!searchUser"
-                />
-                <X
-                  class="absolute top-[30%] transform -translate-y-[2px] text-gray-400 hover:text-gray-600 cursor-pointer transition-colors"
-                  :size="20"
-                  :class="!isMobile ? 'right-2' : 'right-3'"
-                  @click="clearsearchUser()"
-                  v-if="searchUser"
-                />
+              <div
+                class="flex flex-row sm:gap-2 border-b"
+                :class="!isMobile ? 'pt-1 gap-2' : 'gap-3'"
+              >
+                <!-- Search Section -->
+                <div class="w-full relative pt-1 pl-4 pb-2">
+                  <input
+                    v-model="searchUser"
+                    @input="handleSearchInput"
+                    type="text"
+                    maxlength="25"
+                    placeholder="Найти пользователя..."
+                    class="w-full pr-7 rounded-lg px-4 py-2 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-100 transition-colors"
+                    :disabled="!isConnected"
+                    @click.stop
+                  />
+                  <Search
+                    class="absolute top-[30%] transform -translate-y-1 text-gray-400 hover:text-gray-600 cursor-pointer transition-colors"
+                    :class="!isMobile ? 'right-2' : 'right-3'"
+                    v-if="!searchUser"
+                  />
+                  <X
+                    class="absolute top-[30%] transform -translate-y-[2px] text-gray-400 hover:text-gray-600 cursor-pointer transition-colors"
+                    :size="20"
+                    :class="!isMobile ? 'right-2' : 'right-3'"
+                    @click="clearsearchUser()"
+                    v-if="searchUser"
+                  />
 
-                <!-- Результаты поиска -->
-                <div
-                  v-if="showSearchResults && searchResults.length > 0"
-                  class="absolute top-full left-0 right-0 bg-white border border-gray-200 rounded-lg shadow-lg mt-1 max-h-60 overflow-y-auto z-10"
-                  @click.stop
-                >
+                  <!-- Результаты поиска -->
                   <div
-                    v-for="user in searchResults"
-                    :key="user.id"
-                    @click="createChatWithUser(user)"
-                    class="px-4 py-3 hover:bg-blue-50 cursor-pointer transition-colors border-b border-gray-100 last:border-b-0"
+                    v-if="showSearchResults && searchResults.length > 0"
+                    class="absolute top-full left-0 right-0 bg-white border border-gray-200 rounded-lg shadow-lg mt-1 max-h-60 overflow-y-auto z-10"
+                    @click.stop
                   >
-                    <div class="font-medium text-gray-800">
-                      {{ user.phone }}
+                    <div
+                      v-for="user in searchResults"
+                      :key="user.id"
+                      @click="createChatWithUser(user)"
+                      class="px-4 py-3 hover:bg-blue-50 cursor-pointer transition-colors border-b border-gray-100 last:border-b-0"
+                    >
+                      <div class="font-medium text-gray-800">
+                        {{ user.phone }}
+                      </div>
+                      <div class="text-sm text-gray-500">{{ user.name }}</div>
                     </div>
-                    <div class="text-sm text-gray-500">{{ user.name }}</div>
+                  </div>
+
+                  <!-- Сообщение "ничего не найдено" -->
+                  <div
+                    v-if="showSearchResults && searchResults.length === 0"
+                    class="absolute top-full left-0 right-0 bg-white border border-gray-200 rounded-lg shadow-lg mt-1 z-10"
+                    @click.stop
+                  >
+                    <div class="px-4 py-3 text-gray-500 text-center">
+                      Пользователи не найдены
+                    </div>
                   </div>
                 </div>
 
-                <!-- Сообщение "ничего не найдено" -->
-                <div
-                  v-if="showSearchResults && searchResults.length === 0"
-                  class="absolute top-full left-0 right-0 bg-white border border-gray-200 rounded-lg shadow-lg mt-1 z-10"
-                  @click.stop
-                >
-                  <div class="px-4 py-3 text-gray-500 text-center">
-                    Пользователи не найдены
-                  </div>
+                <!-- New Chat Button -->
+                <div class="py-1 pr-4">
+                  <button
+                    @click="createNewChat"
+                    class="w-full bg-[#C71585]/30 text-white rounded-lg hover:bg-blue-600 transition-colors w-full flex items-center justify-center"
+                    :class="!isMobile ? 'py-2 px-3' : 'py-2 px-4'"
+                    :disabled="!auth.user"
+                  >
+                    <span class="hidden sm:inline text-center"><Pencil /></span>
+                    <div class="" v-if="isMobile">
+                      <Pencil />
+                    </div>
+                    <div class="" v-if="!isMobile">
+                      <span class="sm:hidden">+ Чат</span>
+                    </div>
+                  </button>
                 </div>
               </div>
 
-              <!-- New Chat Button -->
-              <div class="py-1 pr-4">
-                <button
-                  @click="createNewChat"
-                  class="w-full bg-[#C71585]/30 text-white rounded-lg hover:bg-blue-600 transition-colors w-full flex items-center justify-center"
-                  :class="!isMobile ? 'py-2 px-3' : 'py-2 px-4'"
-                  :disabled="!auth.user"
+              <!-- Chats List -->
+              <div class="flex-1 overflow-y-auto min-h-0">
+                <div v-if="!auth.user" class="p-4 text-center text-gray-500">
+                  Загрузка...
+                </div>
+                <div
+                  v-else-if="displayChats.length === 0"
+                  class="p-4 text-center text-gray-500"
                 >
-                  <span class="hidden sm:inline text-center"><Pencil /></span>
-                  <!-- <span class="sm:hidden" :class="!isMobile ? 'hidden' : ''">+ Чат</span> -->
-                  <div class="" v-if="isMobile">
-                    <Pencil />
+                  Нет чатов, создайте первый чат.
+                </div>
+                <div
+                  v-else
+                  v-for="chat in displayChats"
+                  :key="chat.id"
+                  @click="handleSelectChat(chat)"
+                  class="px-3 sm:px-4 py-3 pr-2 border-b cursor-pointer transition-colors hover:bg-blue-50 active:bg-blue-100"
+                  :class="{
+                    'bg-blue-100 border-blue-200': selectedChat?.id === chat.id,
+                  }"
+                >
+                  <div
+                    class="flex flex-row gap-2 sm:gap-3 justify-between items-center"
+                  >
+                    <div
+                      class="flex flex-row gap-2 sm:gap-3 flex-1 min-w-0 items-center"
+                    >
+                      <div class="w-10 h-10 sm:w-12 sm:h-12 flex-shrink-0">
+                        <nuxt-img
+                          class="w-10 h-10 sm:w-12 sm:h-12 bg-green-200/50 rounded-full"
+                          src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSWAk-mfGdhPFylzhxWsEXqJa6DR5KaCd2ThA&s"
+                        />
+                      </div>
+                      <div class="flex-1 min-w-0">
+                        <div
+                          class="font-semibold text-gray-800 truncate text-sm sm:text-base"
+                        >
+                          {{ chat.name }}
+                        </div>
+                        <div
+                          class="text-xs sm:text-sm text-gray-500 truncate mt-0.5"
+                        >
+                          {{ chat.lastMessage || "Нет сообщений" }}
+                        </div>
+                      </div>
+                    </div>
+                    <div
+                      class="text-xs sm:text-sm flex flex-col justify-center gap-1 text-slate-500 text-right flex-shrink-0"
+                    >
+                      <div
+                        class="flex flex-row gap-1 justify-center items-center text-center"
+                      >
+                        <CheckCheck
+                          :size="12"
+                          class="sm:w-4 sm:h-4"
+                          color="#3b82f6"
+                        />
+                        <div class="text-xs">11:55</div>
+                      </div>
+                      <div
+                        class="bg-blue-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs"
+                      >
+                        23
+                      </div>
+                    </div>
                   </div>
-                  <div class="" v-if="!isMobile">
-                    <span class="sm:hidden">+ Чат</span>
-                  </div>
-                </button>
+                </div>
               </div>
             </div>
 
-            <!-- Chats List -->
-            <div class="flex-1 overflow-y-auto">
-              <div v-if="!auth.user" class="p-4 text-center text-gray-500">
-                Загрузка...
-              </div>
-              <div
-                v-else-if="displayChats.length === 0"
-                class="p-4 text-center text-gray-500"
-              >
-                Нет чатов, создайте первый чат.
-              </div>
+            <!-- Main Chat Area - FIXED: улучшенная структура для мобильных -->
+            <div
+              class="flex-1 flex flex-col transition-all duration-300 ease-in-out w-full min-h-0"
+              :class="{
+                hidden: isMobile && !showChatArea,
+                flex: !isMobile || (isMobile && showChatArea),
+              }"
+            >
+              <template v-if="selectedChat && auth.user">
+                <!-- Chat Header (Desktop) -->
+                <div
+                  class="border-b bg-white px-4 py-3 hidden sm:flex items-center gap-3"
+                >
+                  <div
+                    class="w-10 h-10 bg-green-200/50 rounded-full flex-shrink-0"
+                  >
+                    <nuxt-img
+                      class="w-10 h-10 rounded-full"
+                      src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSWAk-mfGdhPFylzhxWsEXqJa6DR5KaCd2ThA&s"
+                    />
+                  </div>
+                  <div>
+                    <div class="font-semibold text-gray-800">
+                      {{ selectedChat.name }}
+                    </div>
+                    <p class="text-sm text-gray-600">
+                      <span
+                        :class="isConnected ? 'text-green-600' : 'text-red-600'"
+                      >
+                        {{ isConnected ? "online" : "offline" }}
+                      </span>
+                      <span
+                        v-if="connectionError"
+                        class="text-xs text-orange-600 ml-2"
+                      >
+                        ({{ connectionError }})
+                      </span>
+                    </p>
+                  </div>
+                </div>
+
+                <!-- Messages Area - FIXED: правильная структура с отступами -->
+                <div
+                  ref="messagesContainer"
+                  class="flex-1 overflow-y-auto p-3 sm:p-4 space-y-2 bg-gray-50 min-h-0"
+                  :style="{
+                    backgroundImage: `url(${BGChat})`,
+                    backgroundSize: 'contain',
+                    backgroundPosition: 'center',
+                    backgroundRepeat: 'repeat',
+                  }"
+                >
+                  <div
+                    v-for="message in currentMessages"
+                    :key="message.id"
+                    class="flex"
+                    :class="{ 'justify-end': message.sender === currentUser }"
+                  >
+                    <div
+                      class="max-w-[85%] sm:max-w-xs lg:max-w-md px-3 py-2 rounded-2xl shadow-sm"
+                      :class="
+                        message.sender === currentUser
+                          ? 'bg-blue-500 text-white rounded-br-none'
+                          : 'bg-white text-gray-800 rounded-bl-none border'
+                      "
+                    >
+                      <div class="flex flex-col">
+                        <div class="text-sm break-words">
+                          {{ message.text }}
+                        </div>
+                        <div
+                          class="text-xs mt-1 text-right"
+                          :class="
+                            message.sender === currentUser
+                              ? 'text-blue-200'
+                              : 'text-gray-400'
+                          "
+                        >
+                          {{ formatTime(message.timestamp) }}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div
+                    v-if="currentMessages.length === 0"
+                    class="flex-1 flex items-center justify-center text-gray-500 flex-col gap-2 h-full"
+                  >
+                    <div class="text-4xl mb-4">💬</div>
+                    <div class="text-lg font-semibold mb-2">Нет сообщений</div>
+                    <div class="text-sm">Начните общение первым</div>
+                  </div>
+                </div>
+
+                <!-- Message Input - FIXED: используем sticky вместо fixed -->
+                <div
+                  class="border-t bg-white sticky bottom-0 left-0 right-0 z-40 safe-area-inset-bottom"
+                  :class="
+                    !isMobile
+                      ? 'px-3 sm:px-4 py-2'
+                      : 'px-3 py-2 bg-white border-t shadow-lg'
+                  "
+                >
+                  <form
+                    @submit.prevent="handleSendMessage"
+                    class="flex gap-2 items-end"
+                  >
+                    <textarea
+                      v-model="newMessage"
+                      @keydown="handleKeydownImproved"
+                      placeholder="Введите сообщение..."
+                      :rows="textareaRows"
+                      class="flex-1 rounded-2xl content-center px-4 py-3 border-none outline-none resize-none min-h-[44px] max-h-32 overflow-y-auto bg-gray-100 focus:bg-gray-200 transition-colors text-sm sm:text-base"
+                      :disabled="!isConnected"
+                      ref="textareaRef"
+                    />
+                    <button
+                      type="submit"
+                      class="bg-blue-500 text-white p-2 sm:px-4 sm:py-3 rounded-full sm:rounded-lg hover:bg-blue-600 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors flex items-center justify-center h-[44px] w-[44px] sm:w-auto sm:h-[44px] flex-shrink-0"
+                      :disabled="!trimmedMessage || !isConnected"
+                    >
+                      <SendHorizontal :size="20" class="sm:mr-1" />
+                      <span class="hidden sm:inline">Отпр.</span>
+                    </button>
+                  </form>
+                </div>
+              </template>
+
+              <!-- No Chat Selected -->
               <div
                 v-else
-                v-for="chat in displayChats"
-                :key="chat.id"
-                @click="handleSelectChat(chat)"
-                class="px-3 sm:px-4 py-3 pr-2 border-b cursor-pointer transition-colors hover:bg-blue-50 active:bg-blue-100"
-                :class="{
-                  'bg-blue-100 border-blue-200': selectedChat?.id === chat.id,
-                }"
-              >
-                <div
-                  class="flex flex-row gap-2 sm:gap-3 justify-between items-center"
-                >
-                  <div
-                    class="flex flex-row gap-2 sm:gap-3 flex-1 min-w-0 items-center"
-                  >
-                    <div class="w-10 h-10 sm:w-12 sm:h-12 flex-shrink-0">
-                      <nuxt-img
-                        class="w-10 h-10 sm:w-12 sm:h-12 bg-green-200/50 rounded-full"
-                        src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSWAk-mfGdhPFylzhxWsEXqJa6DR5KaCd2ThA&s"
-                      />
-                    </div>
-                    <div class="flex-1 min-w-0">
-                      <div
-                        class="font-semibold text-gray-800 truncate text-sm sm:text-base"
-                      >
-                        {{ chat.name }}
-                      </div>
-                      <div
-                        class="text-xs sm:text-sm text-gray-500 truncate mt-0.5"
-                      >
-                        {{ chat.lastMessage || "Нет сообщений" }}
-                      </div>
-                    </div>
-                  </div>
-                  <div
-                    class="text-xs sm:text-sm flex flex-col justify-center gap-1 text-slate-500 text-right flex-shrink-0"
-                  >
-                    <div
-                      class="flex flex-row gap-1 justify-center items-center text-center"
-                    >
-                      <CheckCheck
-                        :size="12"
-                        class="sm:w-4 sm:h-4"
-                        color="#3b82f6"
-                      />
-                      <div class="text-xs">11:55</div>
-                    </div>
-                    <div
-                      class="bg-blue-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs"
-                    >
-                      23
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- <div class="" v-if="selectedChat">
-            <Menu color="#C71585" @click="MenuApp" />
-          </div> -->
-
-          <!-- Main Chat Area -->
-          <div
-            class="flex-1 flex flex-col transition-all duration-300 ease-in-out w-full"
-            :class="{
-              hidden: isMobile && !showChatArea,
-              flex: !isMobile || (isMobile && showChatArea),
-            }"
-          >
-            <template v-if="selectedChat && auth.user">
-              <!-- Chat Header (Desktop) -->
-              <div
-                class="border-b bg-white px-4 py-3 hidden sm:flex items-center gap-3"
-              >
-                <div
-                  class="w-10 h-10 bg-green-200/50 rounded-full flex-shrink-0"
-                >
-                  <nuxt-img
-                    class="w-10 h-10 rounded-full"
-                    src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSWAk-mfGdhPFylzhxWsEXqJa6DR5KaCd2ThA&s"
-                  />
-                </div>
-                <div>
-                  <div class="font-semibold text-gray-800">
-                    {{ selectedChat.name }}
-                  </div>
-                  <p class="text-sm text-gray-600">
-                    <span
-                      :class="isConnected ? 'text-green-600' : 'text-red-600'"
-                    >
-                      {{ isConnected ? "online" : "offline" }}
-                    </span>
-                    <span
-                      v-if="connectionError"
-                      class="text-xs text-orange-600 ml-2"
-                    >
-                      ({{ connectionError }})
-                    </span>
-                  </p>
-                </div>
-              </div>
-
-              <!-- Messages Area -->
-              <!-- Messages Area -->
-              <div
-                ref="messagesContainer"
-                class="flex-1 overflow-y-auto p-3 sm:p-4 space-y-2 bg-gray-50"
+                class="flex-1 flex items-center justify-center text-gray-500 min-h-0"
                 :style="{
                   backgroundImage: `url(${BGChat})`,
                   backgroundSize: 'contain',
                   backgroundPosition: 'center',
                   backgroundRepeat: 'repeat',
-                  paddingBottom: isMobile ? '80px' : '0', // Добавляем отступ снизу на мобильных
                 }"
               >
-                <div
-                  v-for="message in currentMessages"
-                  :key="message.id"
-                  class="flex"
-                  :class="{ 'justify-end': message.sender === currentUser }"
-                >
-                  <div
-                    class="max-w-[85%] sm:max-w-xs lg:max-w-md px-3 py-2 rounded-2xl shadow-sm"
-                    :class="
-                      message.sender === currentUser
-                        ? 'bg-blue-500 text-white rounded-br-none'
-                        : 'bg-white text-gray-800 rounded-bl-none border'
-                    "
-                  >
-                    <div class="flex flex-col">
-                      <div class="text-sm break-words">{{ message.text }}</div>
-                      <div
-                        class="text-xs mt-1 text-right"
-                        :class="
-                          message.sender === currentUser
-                            ? 'text-blue-200'
-                            : 'text-gray-400'
-                        "
-                      >
-                        {{ formatTime(message.timestamp) }}
-                      </div>
-                    </div>
+                <div class="text-center p-8">
+                  <div class="text-6xl mb-4">👋</div>
+                  <div class="text-xl font-semibold mb-2" v-if="auth.user">
+                    Добро пожаловать!
                   </div>
-                </div>
-
-                <div
-                  v-if="currentMessages.length === 0"
-                  class="flex-1 flex items-center justify-center text-gray-500 flex-col gap-2"
-                  :style="{ marginBottom: isMobile ? '80px' : '0' }"
-                >
-                  <div class="text-4xl mb-4">💬</div>
-                  <div class="text-lg font-semibold mb-2">Нет сообщений</div>
-                  <div class="text-sm">Начните общение первым</div>
-                </div>
-              </div>
-
-              <!-- Message Input -->
-              <div
-                class="border-t bg-white"
-                :class="
-                  !isMobile
-                    ? 'px-3 sm:px-4 py-2'
-                    : 'fixed bottom-0 left-0 right-0 px-3 py-2 bg-white border-t shadow-lg z-50'
-                "
-              >
-                <form
-                  @submit.prevent="sendMessage"
-                  class="flex gap-2 items-end"
-                >
-                  <textarea
-                    v-model="newMessage"
-                    @keydown="handleKeydown"
-                    placeholder="Введите сообщение..."
-                    :rows="textareaRows"
-                    class="flex-1 rounded-2xl content-center px-4 py-3 border-none outline-none resize-none min-h-[44px] max-h-32 overflow-y-auto bg-gray-100 focus:bg-gray-200 transition-colors text-sm sm:text-base"
-                    :disabled="!isConnected"
-                    ref="textareaRef"
-                  />
+                  <div class="text-lg font-semibold mb-2" v-else>
+                    Загрузка...
+                  </div>
+                  <div class="text-sm text-gray-600 max-w-sm">
+                    Выберите чат из списка или создайте новый для начала общения
+                  </div>
                   <button
-                    type="submit"
-                    class="bg-blue-500 text-white p-2 sm:px-4 sm:py-3 rounded-full sm:rounded-lg hover:bg-blue-600 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors flex items-center justify-center h-[44px] w-[44px] sm:w-auto sm:h-[44px] flex-shrink-0"
-                    :disabled="!newMessage.trim() || !isConnected"
+                    v-if="auth.user && isMobile"
+                    @click="createNewChat"
+                    class="mt-4 bg-blue-500 text-white py-3 px-6 rounded-full hover:bg-blue-600 transition-colors font-medium"
                   >
-                    <SendHorizontal :size="20" class="sm:mr-1" />
-                    <span class="hidden sm:inline">Отпр.</span>
+                    Создать новый чат
                   </button>
-                </form>
-              </div>
-            </template>
-
-            <!-- No Chat Selected -->
-
-            <div
-              v-else
-              class="flex-1 flex items-center justify-center text-gray-500 bg-[linear-gradient(85deg,var(--tw-gradient-stops))] from-green-300 to-purple-300"
-              :style="{
-                backgroundImage: `url(${BGChat})`,
-                backgroundSize: 'contain',
-                backgroundPosition: 'center',
-                backgroundRepeat: 'repeat',
-              }"
-              :class="!isMobile ? '' : ''"
-            >
-              <!-- <div
-                class="flex-1 p-4 overflow-y-auto"
-                style="
-                  background-image: url('https://i.pinimg.com/736x/8c/98/99/8c98994518b575bfd8c949e91d20548b.jpg');
-                  background-size: contain;
-                "
-              >
-                123
-              </div> -->
-
-              <!-- <div :class="'bg-[url(' + BGChat + ')] w-5 h-5'"></div> -->
-
-              <!-- <div
-                
-                class="w-20 h-20 z-50"
-              ></div> -->
-
-              <div class="text-center p-8">
-                <div class="text-6xl mb-4">👋</div>
-                <div class="text-xl font-semibold mb-2" v-if="auth.user">
-                  Добро пожаловать!
                 </div>
-                <div class="text-lg font-semibold mb-2" v-else>Загрузка...</div>
-                <div class="text-sm text-gray-600 max-w-sm">
-                  Выберите чат из списка или создайте новый для начала общения
-                </div>
-                <button
-                  v-if="auth.user && isMobile"
-                  @click="createNewChat"
-                  class="mt-4 bg-blue-500 text-white py-3 px-6 rounded-full hover:bg-blue-600 transition-colors font-medium"
-                >
-                  Создать новый чат
-                </button>
               </div>
             </div>
           </div>
@@ -574,6 +570,16 @@ watch(
 </template>
 
 <style scoped>
+/* Safe area support для современных мобильных браузеров */
+.safe-area-inset-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Гарантируем что все flex-контейнеры правильно работают с высотой */
+.min-h-0 {
+  min-height: 0;
+}
+
 /* Стили для скроллбара как в Telegram */
 .messages-container::-webkit-scrollbar {
   width: 4px;
@@ -604,5 +610,12 @@ watch(
 
 .slide-leave-to {
   transform: translateX(-100%);
+}
+
+/* Улучшенные стили для мобильного ввода */
+@media (max-width: 768px) {
+  .messages-container {
+    padding-bottom: 0 !important;
+  }
 }
 </style>
