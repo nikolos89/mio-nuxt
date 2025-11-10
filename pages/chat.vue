@@ -440,7 +440,14 @@ function MenuApp() {
               </div>
 
               <!-- Message Input -->
-              <div class="px-3 sm:px-4 py-2 border-t bg-white">
+              <div
+                class="border-t bg-white"
+                :class="
+                  !isMobile
+                    ? 'px-3 sm:px-4 py-2'
+                    : 'fixed bottom-0 left-0 right-0 p-4 bg-white border-t shadow-lg z-50'
+                "
+              >
                 <form
                   @submit.prevent="sendMessage"
                   class="flex gap-2 items-end"
@@ -456,7 +463,7 @@ function MenuApp() {
                   />
                   <button
                     type="submit"
-                    class="bg-blue-500 text-white p-2 sm:px-4 sm:py-3 rounded-full sm:rounded-lg hover:bg-blue-600 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors flex items-center justify-center h-[44px] w-[44px] sm:w-auto sm:h-[52px]"
+                    class="bg-blue-500 text-white p-2 sm:px-4 sm:py-3 rounded-full sm:rounded-lg hover:bg-blue-600 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors flex items-center justify-center h-[44px] w-[44px] sm:w-auto sm:h-[52px] flex-shrink-0"
                     :disabled="!newMessage.trim() || !isConnected"
                   >
                     <SendHorizontal :size="20" class="sm:mr-1" />
