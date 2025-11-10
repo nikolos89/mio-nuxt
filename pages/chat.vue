@@ -115,7 +115,7 @@ function MenuApp() {
     :class="isMobile ? 'flex flex-col gap-0' : ''"
   >
     <!-- Header -->
-    <div class="bg-white shadow-sm border-b sticky top-0 z-20 max-h-16">
+    <div class="bg-white shadow-sm border-b fixed top-0 left-0 right-0 z-50">
       <div
         class="max-w-6xl mx-auto px-4 py-3 flex justify-between items-center"
       >
