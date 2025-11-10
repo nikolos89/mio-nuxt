@@ -117,7 +117,9 @@ function MenuApp() {
     :class="isMobile ? 'flex flex-col gap-0' : ''"
   >
     <!-- Header -->
-    <div class="bg-white shadow-sm border-b fixed top-0 left-0 right-0 z-50">
+    <div
+      class="bg-white shadow-sm border-b h-13 fixed top-0 left-0 right-0 z-50"
+    >
       <div
         class="max-w-6xl mx-auto px-4 py-3 flex justify-between items-center"
       >
@@ -131,13 +133,13 @@ function MenuApp() {
             <ArrowLeft :size="20" color="#C71585" />
           </button>
 
-          <div class="" v-if="!selectedChat">
+          <div class="" v-if="!selectedChat || !isMobile">
             <Menu color="#C71585" @click="MenuApp" />
           </div>
 
           <h1
             class="text-xl font-bold text-gray-800 text-md flex flex-row"
-            v-if="!selectedChat"
+            v-if="!selectedChat || !isMobile"
           >
             <div class="text-[#C71585]">M</div>
             <div class="text-[#FF1493]">i</div>
@@ -170,7 +172,7 @@ function MenuApp() {
 
         <div
           class="text-right flex items-center gap-4"
-          v-if="auth.user && !selectedChat"
+          v-if="auth.user && (!selectedChat || !isMobile)"
         >
           <p class="text-sm text-gray-600 sm:block">
             {{ auth.user.phone }}
@@ -435,7 +437,13 @@ function MenuApp() {
 
                 <div
                   v-if="currentMessages.length === 0"
-                  class="text-center text-gray-500 flex flex-col h-full justify-center items-center p-8"
+                  class="flex-1 flex items-center justify-center text-gray-500 bg-[linear-gradient(85deg,var(--tw-gradient-stops))] from-green-300 to-purple-300"
+                  :style="{
+                    backgroundImage: `url(${BGChat})`,
+                    backgroundSize: 'contain',
+                    backgroundPosition: 'center',
+                    backgroundRepeat: 'repeat',
+                  }"
                 >
                   <div class="text-4xl mb-4">💬</div>
                   <div class="text-lg font-semibold mb-2">Нет сообщений</div>
@@ -467,7 +475,7 @@ function MenuApp() {
                   />
                   <button
                     type="submit"
-                    class="bg-blue-500 text-white p-2 sm:px-4 sm:py-3 rounded-full sm:rounded-lg hover:bg-blue-600 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors flex items-center justify-center h-[44px] w-[44px] sm:w-auto sm:h-[52px] flex-shrink-0"
+                    class="bg-blue-500 text-white p-2 sm:px-4 sm:py-3 rounded-full sm:rounded-lg hover:bg-blue-600 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors flex items-center justify-center h-[44px] w-[44px] sm:w-auto sm:h-[44px] flex-shrink-0"
                     :disabled="!newMessage.trim() || !isConnected"
                   >
                     <SendHorizontal :size="20" class="sm:mr-1" />
