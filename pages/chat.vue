@@ -133,9 +133,9 @@ function MenuApp() {
             <ArrowLeft :size="20" color="#C71585" />
           </button>
 
-          <div class="" v-if="!selectedChat || !isMobile">
+          <!-- <div class="" v-if="selectedChat">
             <Menu color="#C71585" @click="MenuApp" />
-          </div>
+          </div> -->
 
           <h1
             class="text-xl font-bold text-gray-800 text-md flex flex-row"
@@ -359,6 +359,10 @@ function MenuApp() {
             </div>
           </div>
 
+          <!-- <div class="" v-if="selectedChat">
+            <Menu color="#C71585" @click="MenuApp" />
+          </div> -->
+
           <!-- Main Chat Area -->
           <div
             class="flex-1 flex flex-col transition-all duration-300 ease-in-out w-full"
@@ -403,7 +407,13 @@ function MenuApp() {
               <!-- Messages Area -->
               <div
                 ref="messagesContainer"
-                class="flex-1 overflow-y-auto p-3 sm:p-4 space-y-2 bg-gray-50"
+                class="flex-1 overflow-y-auto p-3 sm:p-4 space-y-2 bg-gray-50 bg-[linear-gradient(85deg,var(--tw-gradient-stops))] from-green-300 to-purple-300"
+                :style="{
+                  backgroundImage: `url(${BGChat})`,
+                  backgroundSize: 'contain',
+                  backgroundPosition: 'center',
+                  backgroundRepeat: 'repeat',
+                }"
               >
                 <div
                   v-for="message in currentMessages"
@@ -437,13 +447,7 @@ function MenuApp() {
 
                 <div
                   v-if="currentMessages.length === 0"
-                  class="flex-1 flex items-center justify-center text-gray-500 bg-[linear-gradient(85deg,var(--tw-gradient-stops))] from-green-300 to-purple-300"
-                  :style="{
-                    backgroundImage: `url(${BGChat})`,
-                    backgroundSize: 'contain',
-                    backgroundPosition: 'center',
-                    backgroundRepeat: 'repeat',
-                  }"
+                  class="flex-1 flex items-center justify-center text-gray-500 flex-col gap-2"
                 >
                   <div class="text-4xl mb-4">💬</div>
                   <div class="text-lg font-semibold mb-2">Нет сообщений</div>
