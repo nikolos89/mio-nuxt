@@ -1,5 +1,5 @@
 // server/api/telegram/webhook.post.ts
-import { telegramService } from "~/utils/telegram";
+import { telegramService } from "../../utils/telegram";
 
 export default defineEventHandler(async (event) => {
   try {
