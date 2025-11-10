@@ -195,10 +195,10 @@ function MenuApp() {
 
     <div
       class="max-w-6xl mx-auto sm:p-4 flex flex-1 h-[calc(100vh-2.5rem)]"
-      :class="isMobile ? 'flex-1 w-full' : 'p-0'"
+      :class="isMobile ? 'flex-1 w-full pb-3' : 'p-0 '"
     >
       <div class="bg-white rounded-lg shadow-lg overflow-hidden flex flex-1">
-        <div class="flex flex-1">
+        <div class="flex flex-1 w-full">
           <!-- Sidebar - Список чатов -->
           <div
             class="border-r bg-gray-50 flex flex-col transition-all duration-300 ease-in-out"
@@ -414,6 +414,7 @@ function MenuApp() {
                   backgroundPosition: 'center',
                   backgroundRepeat: 'repeat',
                 }"
+                :class="isMobile ? '' : ''"
               >
                 <div
                   v-for="message in currentMessages"
@@ -461,7 +462,7 @@ function MenuApp() {
                 :class="
                   !isMobile
                     ? 'px-3 sm:px-4 py-2'
-                    : 'fixed bottom-0 left-0 right-0 p-4 bg-white border-t shadow-lg z-50'
+                    : 'fixed bottom-0 left-0 right-0 px-3 py-2 bg-white border-t shadow-lg z-50'
                 "
               >
                 <form
