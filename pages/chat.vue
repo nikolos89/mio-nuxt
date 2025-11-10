@@ -7,6 +7,7 @@ import {
   Menu,
   ArrowLeft,
   Pencil,
+  EllipsisVertical,
 } from "lucide-vue-next";
 
 definePageMeta({
@@ -161,11 +162,11 @@ function MenuApp() {
           </div>
         </div>
 
-        <div class="text-right flex items-center gap-4">
-          <p
-            class="text-sm text-gray-600 sm:block"
-            v-if="auth.user && !selectedChat"
-          >
+        <div
+          class="text-right flex items-center gap-4"
+          v-if="auth.user && !selectedChat"
+        >
+          <p class="text-sm text-gray-600 sm:block">
             {{ auth.user.phone }}
           </p>
           <button
@@ -174,6 +175,10 @@ function MenuApp() {
           >
             Выйти
           </button>
+
+          <div class="" v-if="selectedChat">
+            <EllipsisVertical />
+          </div>
         </div>
       </div>
     </div>
@@ -187,13 +192,16 @@ function MenuApp() {
           <div
             class="border-r bg-gray-50 flex flex-col transition-all duration-300 ease-in-out"
             :class="{
-              'w-1/4': !isMobile,
+              'w-[28%]': !isMobile,
               'absolute inset-0 z-10 mt-14 ': isMobile && showChatList,
               hidden: isMobile && !showChatList,
               'w-full ': isMobile,
             }"
           >
-            <div class="flex flex-row gap-3 sm:gap-2 border-b">
+            <div
+              class="flex flex-row sm:gap-2 border-b"
+              :class="!isMobile ? 'pt-1 gap-2' : 'gap-3'"
+            >
               <!-- Search Section -->
               <div class="w-full relative pt-1 pl-4 pb-2">
                 <input
@@ -207,12 +215,14 @@ function MenuApp() {
                   @click.stop
                 />
                 <Search
-                  class="absolute right-3 top-[30%] transform -translate-y-1 text-gray-400 hover:text-gray-600 cursor-pointer transition-colors"
+                  class="absolute top-[30%] transform -translate-y-1 text-gray-400 hover:text-gray-600 cursor-pointer transition-colors"
+                  :class="!isMobile ? 'right-2' : 'right-3'"
                   v-if="!searchUser"
                 />
                 <X
-                  class="absolute right-3 top-[30%] transform -translate-y-[2px] text-gray-400 hover:text-gray-600 cursor-pointer transition-colors"
+                  class="absolute top-[30%] transform -translate-y-[2px] text-gray-400 hover:text-gray-600 cursor-pointer transition-colors"
                   :size="20"
+                  :class="!isMobile ? 'right-2' : 'right-3'"
                   @click="clearsearchUser()"
                   v-if="searchUser"
                 />
@@ -252,10 +262,11 @@ function MenuApp() {
               <div class="py-1 pr-4">
                 <button
                   @click="createNewChat"
-                  class="w-full bg-[#C71585]/30 text-white py-2 px-4 rounded-lg hover:bg-blue-600 transition-colors flex items-center justify-center gap-2"
+                  class="w-full bg-[#C71585]/30 text-white rounded-lg hover:bg-blue-600 transition-colors w-full flex items-center justify-center"
+                  :class="!isMobile ? 'py-2 px-3' : 'py-2 px-4'"
                   :disabled="!auth.user"
                 >
-                  <span class="hidden sm:inline">Новый чат</span>
+                  <span class="hidden sm:inline text-center"><Pencil /></span>
                   <!-- <span class="sm:hidden" :class="!isMobile ? 'hidden' : ''">+ Чат</span> -->
                   <div class="" v-if="isMobile">
                     <Pencil />
